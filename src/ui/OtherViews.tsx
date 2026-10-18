@@ -81,7 +81,7 @@ function MarketView({ state }: { state: GameState }) {
   )
 }
 
-function JournalView({ state, onRestart }: { state: GameState; onRestart: () => void }) {
+function JournalView({ state }: { state: GameState }) {
   return (
     <>
       <Section title="Journal">
@@ -91,14 +91,11 @@ function JournalView({ state, onRestart }: { state: GameState; onRestart: () => 
           </p>
         ))}
       </Section>
-      <button className="btn danger block" onClick={() => confirm('Recommencer une nouvelle partie ? La partie en cours sera perdue.') && onRestart()}>
-        Nouvelle partie
-      </button>
     </>
   )
 }
 
-export function InfosView({ state, onRestart }: { state: GameState; onRestart: () => void }) {
+export function InfosView({ state }: { state: GameState }) {
   const [tab, setTab] = useState<'marche' | 'journal'>('marche')
   return (
     <>
@@ -110,7 +107,7 @@ export function InfosView({ state, onRestart }: { state: GameState; onRestart: (
           Journal
         </button>
       </div>
-      {tab === 'marche' ? <MarketView state={state} /> : <JournalView state={state} onRestart={onRestart} />}
+      {tab === 'marche' ? <MarketView state={state} /> : <JournalView state={state} />}
     </>
   )
 }

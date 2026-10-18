@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { getParcel, isVacant, parcelRent, parcelTraffic } from '../game/city'
 import { openBusiness, openingCost, serviceCapacity } from '../game/engine'
 import { SECTORS, getDistrict, getSector } from '../game/sectors'
@@ -14,10 +14,22 @@ const OVERLAYS: { id: Overlay; label: string }[] = [
   { id: 'rent', label: 'Loyers' },
 ]
 
-export function CityView({ state, act, onManage }: { state: GameState; act: Act; onManage: (businessId: string) => void }) {
+export function CityView({
+  state,
+  act,
+  onManage,
+  onSheetChange,
+}: {
+  state: GameState
+  act: Act
+  onManage: (businessId: string) => void
+  onSheetChange: (open: boolean) => void
+}) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [overlay, setOverlay] = useState<Overlay>('none')
   const [picking, setPicking] = useState(false)
+
+  useEffect(() => onSheetChange(selectedId !== null), [selectedId, onSheetChange])
 
   const parcel = selectedId ? getParcel(state.city, selectedId) : null
   const business = parcel ? state.businesses.find((b) => b.parcelId === parcel.id) : undefined
@@ -97,7 +109,13 @@ export function CityView({ state, act, onManage }: { state: GameState; act: Act;
                 </div>
               </div>
               {serviceCapacity(business) === 0 && <p className="warn small">Aucun employé : le commerce ne peut servir personne.</p>}
-              <button className="btn primary block" onClick={() => onManage(business.id)}>
+              <button
+                className="btn primary block"
+                onClick={() => {
+                  setSelectedId(null)
+                  onManage(business.id)
+                }}
+              >
                 Gérer le commerce
               </button>
             </>

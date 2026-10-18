@@ -1,33 +1,55 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { dateOf } from './game/engine'
-import { BusinessView } from './ui/BusinessView'
+import type { Conversation } from './game/types'
 import { CityView } from './ui/CityView'
-import { EmpireView } from './ui/EmpireView'
 import { eur } from './ui/format'
 import { Icon, type IconName } from './ui/icons'
-import { BankView, InfosView } from './ui/OtherViews'
+import { Avatar } from './ui/phone/MessagesApp'
+import { Phone, phoneBadges, type PhoneRoute } from './ui/phone/Phone'
 import { useGame } from './ui/useGame'
-
-const NAV: { id: View; label: string; icon: IconName }[] = [
-  { id: 'city', label: 'Ville', icon: 'map' },
-  { id: 'empire', label: 'Empire', icon: 'empire' },
-  { id: 'bank', label: 'Banque', icon: 'bank' },
-  { id: 'infos', label: 'Infos', icon: 'news' },
-]
-type View = 'city' | 'empire' | 'bank' | 'infos'
 
 const SPEED_ICONS: IconName[] = ['pause', 'play', 'fast', 'fastest']
 const dateFmt = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
 
 export default function App() {
   const { state, act, speed, setSpeed, restart } = useGame()
-  const [view, setView] = useState<View>('city')
-  const [openId, setOpenId] = useState<string | null>(null)
-  const business = state.businesses.find((b) => b.id === openId)
-  const onMap = view === 'city' && !business
+  const [phoneOpen, setPhoneOpen] = useState(false)
+  const [route, setRoute] = useState<PhoneRoute>({ app: null })
+  const [toast, setToast] = useState<Conversation | null>(null)
+  const [citySheetOpen, setCitySheetOpen] = useState(false)
+
+  const openPhone = (r: PhoneRoute) => {
+    setRoute(r)
+    setPhoneOpen(true)
+  }
+
+  // Notification façon téléphone quand un nouveau message arrive.
+  const seen = useRef<Set<string> | null>(null)
+  useEffect(() => {
+    if (!seen.current) {
+      // Au lancement, seul le message non lu le plus récent est notifié.
+      const newest = state.inbox.find((c) => c.unread)
+      seen.current = new Set(state.inbox.filter((c) => c !== newest).map((c) => c.id))
+    }
+    const fresh = state.inbox.find((c) => c.unread && !seen.current!.has(c.id))
+    for (const c of state.inbox) seen.current.add(c.id)
+    if (!fresh) return
+    // Une décision à prendre met le jeu en pause pour laisser le temps de répondre.
+    if (fresh.choices.length > 0) setSpeed(0)
+    if (!(phoneOpen && route.app === 'messages')) setToast(fresh)
+  }, [state.inbox, phoneOpen, route.app, setSpeed])
+
+  useEffect(() => {
+    if (!toast) return
+    const id = setTimeout(() => setToast(null), 5000)
+    return () => clearTimeout(id)
+  }, [toast])
+
+  const badges = phoneBadges(state)
+  const badgeTotal = (badges.messages ?? 0) + (badges.commerces ?? 0)
 
   return (
-    <div className={`app ${onMap ? 'on-map' : ''}`}>
+    <div className="app on-map">
       <header className="topbar">
         <div className={`chip-lg cash ${state.cash < 0 ? 'bad' : ''}`}>
           <span className="coin">
@@ -69,37 +91,55 @@ export default function App() {
         </div>
       )}
 
-      {onMap ? (
-        <CityView state={state} act={act} onManage={setOpenId} />
-      ) : (
-        <main className="content">
-          {business ? (
-            <BusinessView state={state} business={business} act={act} onBack={() => setOpenId(null)} />
-          ) : view === 'empire' ? (
-            <EmpireView state={state} onOpen={setOpenId} onFindLot={() => setView('city')} />
-          ) : view === 'bank' ? (
-            <BankView state={state} act={act} />
-          ) : (
-            <InfosView state={state} onRestart={restart} />
-          )}
-        </main>
+      <CityView
+        state={state}
+        act={act}
+        onManage={(businessId) => openPhone({ app: 'commerces', businessId })}
+        onSheetChange={setCitySheetOpen}
+      />
+
+      {!phoneOpen && !citySheetOpen && (
+        <button className="phone-button" onClick={() => openPhone(route.app ? route : { app: null })} aria-label="Ouvrir le téléphone">
+          <Icon name="phone" size={28} />
+          {badgeTotal > 0 && <span className="badge">{badgeTotal}</span>}
+        </button>
       )}
 
-      <nav className="bottomnav">
-        {NAV.map((n) => (
-          <button
-            key={n.id}
-            className={view === n.id && !business ? 'active' : ''}
-            onClick={() => {
-              setView(n.id)
-              setOpenId(null)
-            }}
-          >
-            <Icon name={n.icon} size={22} />
-            {n.label}
-          </button>
-        ))}
-      </nav>
+      {toast && (
+        <button
+          className="toast"
+          onClick={() => {
+            openPhone({ app: 'messages', convId: toast.id })
+            setToast(null)
+          }}
+        >
+          <Avatar kind={toast.kind} size={36} />
+          <span className="choice-main">
+            <strong className="small">{toast.contact}</strong>
+            <span className="small muted ellipsis">{toast.lines.at(-1)?.text}</span>
+          </span>
+        </button>
+      )}
+
+      {phoneOpen && (
+        <Phone
+          state={state}
+          act={act}
+          route={route}
+          setRoute={setRoute}
+          onClose={() => setPhoneOpen(false)}
+          onFindLot={() => {
+            setPhoneOpen(false)
+            setRoute({ app: null })
+          }}
+          onRestart={() => {
+            seen.current = null
+            restart()
+            setPhoneOpen(false)
+            setRoute({ app: null })
+          }}
+        />
+      )}
     </div>
   )
 }

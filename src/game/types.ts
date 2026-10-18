@@ -122,6 +122,8 @@ export interface Business {
   marketingDaily: number
   /** Réputation 0-100. */
   reputation: number
+  /** Ajustement du loyer négocié avec le propriétaire (1 = loyer de base). */
+  rentMult: number
   history: DayReport[]
 }
 
@@ -144,6 +146,42 @@ export interface LogEntry {
   tone: 'info' | 'good' | 'bad'
 }
 
+export interface ChatLine {
+  from: 'them' | 'me'
+  text: string
+  day: number
+}
+
+export interface Choice {
+  id: string
+  label: string
+  /** Conséquence annoncée au joueur (« +100 €/mois · moral + »). */
+  hint: string
+  tone?: 'good' | 'bad'
+}
+
+export type ConversationKind = 'advisor' | 'raise' | 'supplier' | 'landlord' | 'press' | 'bank'
+
+/** Une discussion de l'appli Messages. Les choix en attente sont les décisions à prendre. */
+export interface Conversation {
+  id: string
+  kind: ConversationKind
+  contact: string
+  role: string
+  businessId?: string
+  employeeId?: string
+  productId?: string
+  /** Montant en jeu (salaire demandé, prix de l'offre…). */
+  amount?: number
+  quantity?: number
+  lines: ChatLine[]
+  choices: Choice[]
+  /** Jour où la demande expire sans réponse. */
+  expiresDay?: number
+  unread: boolean
+  lastDay: number
+}
+
 export interface GameState {
   version: number
   seed: number
@@ -162,5 +200,8 @@ export interface GameState {
   businesses: Business[]
   candidates: Candidate[]
   log: LogEntry[]
+  inbox: Conversation[]
+  /** Conseils déjà envoyés, pour ne pas les répéter. */
+  flags: Record<string, boolean>
   nextId: number
 }

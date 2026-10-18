@@ -1,43 +1,21 @@
+import { dailyMessages, fairSalary, welcomeMessage } from './messages'
 import { generateCity, getParcel, parcelRent, parcelTraffic, isVacant } from './city'
 import { FIRST_NAMES, LAST_NAMES, RANDOM_EVENTS, SECTORS, SUPPLIERS, getSector } from './sectors'
-import type { Business, Candidate, DayReport, Employee, GameState, LogEntry, ProductState, SupplierTier } from './types'
+import type { Business, Candidate, DayReport, Employee, GameState, ProductState, SupplierTier } from './types'
+import { clamp, log, newId, pick, rand, randRange, round2, update } from './util'
 
-export const SAVE_VERSION = 2
+export { rand }
+export { fairSalary }
+
+export const SAVE_VERSION = 3
 export const START_CASH = 60000
 const HISTORY_DAYS = 120
-const LOG_SIZE = 80
 const BANKRUPTCY_DAYS = 30
 /** Jour 1 = lundi 4 janvier 2027. */
 const START_DATE = Date.UTC(2027, 0, 4)
 const WEEKDAY_TRAFFIC = [0.9, 0.95, 1, 1, 1.1, 1.25, 0.8]
 
-// ---------- Utilitaires ----------
-
-/** Générateur pseudo-aléatoire déterministe (mulberry32) stocké dans l'état pour des parties reproductibles. */
-export function rand(s: GameState): number {
-  let t = (s.seed = (s.seed + 0x6d2b79f5) | 0)
-  t = Math.imul(t ^ (t >>> 15), t | 1)
-  t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-}
-
-const randRange = (s: GameState, min: number, max: number) => min + rand(s) * (max - min)
-const pick = <T>(s: GameState, arr: T[]): T => arr[Math.floor(rand(s) * arr.length)]
-const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
-const round2 = (v: number) => Math.round(v * 100) / 100
-
-function update(s: GameState, fn: (d: GameState) => void): GameState {
-  const d = structuredClone(s)
-  fn(d)
-  return d
-}
-
-function log(s: GameState, text: string, tone: LogEntry['tone'] = 'info') {
-  s.log.unshift({ day: s.day, text, tone })
-  if (s.log.length > LOG_SIZE) s.log.length = LOG_SIZE
-}
-
-const newId = (s: GameState, prefix: string) => `${prefix}${s.nextId++}`
+// ---------- Dates ----------
 
 export function dateOf(day: number): Date {
   return new Date(START_DATE + (day - 1) * 86400000)
@@ -105,11 +83,6 @@ export function openingCost(state: GameState, sectorId: string, parcelId: string
   return getSector(sectorId).setupCost + parcelRent(getParcel(state.city, parcelId)) * 2
 }
 
-/** Salaire attendu sur le marché pour un niveau de compétence donné. */
-export function fairSalary(baseSalary: number, skill: number): number {
-  return baseSalary * (0.8 + skill / 160)
-}
-
 // ---------- Création de partie ----------
 
 export function newGame(seed = Date.now() % 2147483647): GameState {
@@ -129,10 +102,13 @@ export function newGame(seed = Date.now() % 2147483647): GameState {
     businesses: [],
     candidates: [],
     log: [],
+    inbox: [],
+    flags: {},
     nextId: 1,
   }
   s.city = generateCity(() => rand(s))
   refreshCandidates(s)
+  welcomeMessage(s)
   log(s, `Bienvenue ! Vous démarrez avec ${START_CASH.toLocaleString('fr-FR')} €. Ouvrez votre première entreprise.`, 'good')
   return s
 }
@@ -246,7 +222,7 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
   }
 
   const wages = monthlyWages(b) / 30
-  const rent = parcelRent(parcel) / 30
+  const rent = (parcelRent(parcel) * b.rentMult) / 30
   const marketing = b.marketingDaily
   s.cash -= wages + rent + marketing
 
@@ -338,6 +314,7 @@ export function tick(state: GameState): GameState {
     } else {
       s.daysInDebt = 0
     }
+    dailyMessages(s)
   })
 }
 
@@ -361,6 +338,7 @@ export function openBusiness(state: GameState, sectorId: string, parcelId: strin
       employees: [],
       marketingDaily: 0,
       reputation: 50,
+      rentMult: 1,
       history: [],
       products: sector.products.map((p) => ({
         id: p.id,
@@ -483,3 +461,15 @@ export function repay(state: GameState, amount: number): GameState {
   })
 }
 
+
+/** Convertit une sauvegarde d'une version précédente au lieu de faire perdre la partie. */
+export function migrate(raw: GameState): GameState | null {
+  const s = raw as GameState & { version: number }
+  if (s.version === 2) {
+    s.inbox = []
+    s.flags = { welcome: true }
+    for (const b of s.businesses) b.rentMult = 1
+    s.version = 3
+  }
+  return s.version === SAVE_VERSION ? s : null
+}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { SAVE_VERSION, newGame, tick } from '../game/engine'
+import { migrate, newGame, tick } from '../game/engine'
 import type { GameState } from '../game/types'
 
 const SAVE_KEY = 'tycoon-save'
@@ -10,8 +10,7 @@ function load(): GameState | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY)
     if (!raw) return null
-    const s = JSON.parse(raw) as GameState
-    return s.version === SAVE_VERSION ? s : null
+    return migrate(JSON.parse(raw) as GameState)
   } catch {
     return null
   }

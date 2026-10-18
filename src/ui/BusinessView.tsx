@@ -28,15 +28,17 @@ import type { Act } from './useGame'
 const TABS = ['Aperçu', 'Produits', 'Équipe', 'Marketing', 'Finances'] as const
 type Tab = (typeof TABS)[number]
 
-export function BusinessView({ state, business: b, act, onBack }: { state: GameState; business: Business; act: Act; onBack: () => void }) {
+export function BusinessView({ state, business: b, act, onBack }: { state: GameState; business: Business; act: Act; onBack?: () => void }) {
   const [tab, setTab] = useState<Tab>('Aperçu')
   const sector = getSector(b.sectorId)
   return (
     <>
       <div className="biz-header">
-        <button className="icon-btn" onClick={onBack} aria-label="Retour">
-          <Icon name="back" />
-        </button>
+        {onBack && (
+          <button className="icon-btn" onClick={onBack} aria-label="Retour">
+            <Icon name="back" />
+          </button>
+        )}
         <span className="sector-badge" style={{ background: sector.color }}>
           <Icon name={b.sectorId as IconName} size={22} />
         </span>
@@ -63,7 +65,7 @@ export function BusinessView({ state, business: b, act, onBack }: { state: GameS
   )
 }
 
-function Overview({ state, b, act, onBack }: { state: GameState; b: Business; act: Act; onBack: () => void }) {
+function Overview({ state, b, act, onBack }: { state: GameState; b: Business; act: Act; onBack?: () => void }) {
   const last = b.history.at(-1)
   const capacity = serviceCapacity(b)
   const alerts: string[] = []
@@ -101,7 +103,7 @@ function Overview({ state, b, act, onBack }: { state: GameState; b: Business; ac
           onClick={() => {
             if (confirm(`Vendre ${b.name} pour ${eur(businessValue(b))} ?`)) {
               act(sellBusiness, b.id)
-              onBack()
+              onBack?.()
             }
           }}
         >
