@@ -2,7 +2,15 @@
 
 Jeu mobile de gestion d'entreprises, inspiré de Big Ambitions, Business Tycoon, Coffee Inc 2 et Life Sim.
 
-## Jouer
+## Jouer sur téléphone
+
+Le jeu est publié automatiquement sur **https://ttbsg.github.io/New/** à chaque mise à jour.
+
+Pour l'installer comme une application :
+- **iPhone (Safari)** : bouton Partager, puis « Sur l'écran d'accueil ».
+- **Android (Chrome)** : menu ⋮, puis « Ajouter à l'écran d'accueil » ou « Installer l'application ».
+
+## Jouer sur ordinateur (développement)
 
 ```bash
 npm install
