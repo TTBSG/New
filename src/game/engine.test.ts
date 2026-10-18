@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { isVacant } from './city'
 import { borrow, fire, hire, newGame, openBusiness, repay, setPrice, tick } from './engine'
 import { SECTORS } from './sectors'
 import type { GameState } from './types'
@@ -8,10 +9,15 @@ function run(s: GameState, days: number) {
   return s
 }
 
-function staffed(sectorId: string, locationId: string, staff: number, seed = 42) {
+/** Premier local libre du quartier demandé. */
+function lotIn(s: GameState, districtId: string) {
+  return s.city.parcels.find((p) => p.districtId === districtId && isVacant(p, s.businesses))!.id
+}
+
+function staffed(sectorId: string, districtId: string, staff: number, seed = 42) {
   let s = newGame(seed)
   s = borrow(s, 100000)
-  s = openBusiness(s, sectorId, locationId, 'Test')
+  s = openBusiness(s, sectorId, lotIn(s, districtId), 'Test')
   const b = s.businesses[0]
   const sector = SECTORS.find((x) => x.id === sectorId)!
   const serviceRole = sector.roles.find((r) => r.capacity > 0)!
@@ -58,6 +64,21 @@ describe('moteur', () => {
     const after = fire(s, s.businesses[0].id, s.businesses[0].employees[0].id)
     expect(after.cash).toBeLessThan(s.cash)
     expect(after.businesses[0].employees).toHaveLength(0)
+  })
+
+  it('la ville a des locaux libres dans chaque quartier', () => {
+    const s = newGame(5)
+    for (const d of ['residentiel', 'commercial', 'centre', 'affaires']) {
+      expect(s.city.parcels.filter((p) => p.districtId === d && p.kind === 'lot').length).toBeGreaterThanOrEqual(4)
+    }
+  })
+
+  it('on ne peut pas ouvrir deux commerces sur le même local', () => {
+    let s = newGame(3)
+    const lot = lotIn(s, 'residentiel')
+    s = openBusiness(s, 'cafe', lot, 'A')
+    s = openBusiness(s, 'cafe', lot, 'B')
+    expect(s.businesses).toHaveLength(1)
   })
 
   it('le prêt est plafonné et remboursable', () => {

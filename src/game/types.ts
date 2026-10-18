@@ -23,7 +23,8 @@ export interface RoleDef {
 export interface SectorDef {
   id: SectorId
   name: string
-  emoji: string
+  /** Couleur de l'enseigne (auvent, icône). */
+  color: string
   description: string
   /** Coût d'aménagement et d'équipement à l'ouverture. */
   setupCost: number
@@ -35,12 +36,38 @@ export interface SectorDef {
   roles: RoleDef[]
 }
 
-export interface LocationDef {
+export interface DistrictDef {
   id: string
   name: string
+  /** Loyer mensuel moyen d'un local commercial. */
   rentMonthly: number
-  /** Passants par jour. */
+  /** Passants par jour devant un local moyen. */
   traffic: number
+}
+
+export type ParcelKind = 'lot' | 'building' | 'park'
+
+/** Une case de la ville. Les « lots » sont les locaux commerciaux qu'on peut louer. */
+export interface Parcel {
+  id: string
+  i: number
+  j: number
+  districtId: string
+  kind: ParcelKind
+  address: string
+  /** Multiplicateurs propres à l'emplacement (rue passante, bonne affaire…). */
+  trafficMult: number
+  rentMult: number
+  /** Apparence des bâtiments décoratifs. */
+  height: number
+  variant: number
+}
+
+export interface City {
+  size: number
+  /** Indices des lignes et colonnes occupées par des rues. */
+  roads: number[]
+  parcels: Parcel[]
 }
 
 export type SupplierTier = 'eco' | 'standard' | 'premium'
@@ -87,7 +114,7 @@ export interface Business {
   id: string
   name: string
   sectorId: SectorId
-  locationId: string
+  parcelId: string
   openedDay: number
   products: ProductState[]
   employees: Employee[]
@@ -131,6 +158,7 @@ export interface GameState {
   economy: number
   sectorTrends: Record<SectorId, number>
   events: MarketEvent[]
+  city: City
   businesses: Business[]
   candidates: Candidate[]
   log: LogEntry[]

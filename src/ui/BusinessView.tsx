@@ -17,10 +17,12 @@ import {
   stockValue,
   unitCost,
 } from '../game/engine'
-import { SUPPLIERS, getLocation, getSector } from '../game/sectors'
+import { getParcel } from '../game/city'
+import { SUPPLIERS, getSector } from '../game/sectors'
 import type { Business, GameState, SupplierTier } from '../game/types'
 import { BarChart, Meter, NumberField, Section, Stat } from './common'
 import { eur, eurCents, num, signed } from './format'
+import { Icon, type IconName } from './icons'
 import type { Act } from './useGame'
 
 const TABS = ['Aperçu', 'Produits', 'Équipe', 'Marketing', 'Finances'] as const
@@ -32,13 +34,16 @@ export function BusinessView({ state, business: b, act, onBack }: { state: GameS
   return (
     <>
       <div className="biz-header">
-        <button className="icon-btn" onClick={onBack} aria-label="Retour">←</button>
+        <button className="icon-btn" onClick={onBack} aria-label="Retour">
+          <Icon name="back" />
+        </button>
+        <span className="sector-badge" style={{ background: sector.color }}>
+          <Icon name={b.sectorId as IconName} size={22} />
+        </span>
         <div>
-          <h2>
-            {sector.emoji} {b.name}
-          </h2>
+          <h2>{b.name}</h2>
           <span className="muted small">
-            {sector.name} · {getLocation(b.locationId).name}
+            {sector.name} · {getParcel(state.city, b.parcelId).address}
           </span>
         </div>
       </div>
@@ -74,7 +79,9 @@ function Overview({ state, b, act, onBack }: { state: GameState; b: Business; ac
   return (
     <>
       {alerts.map((a) => (
-        <div key={a} className="alert">⚠️ {a}</div>
+        <div key={a} className="alert">
+          <Icon name="alert" size={18} /> <span>{a}</span>
+        </div>
       ))}
       <div className="stats">
         <Stat label="Réputation" value={`${Math.round(b.reputation)}/100`} hint={<Meter value={b.reputation} label="Réputation" />} />
@@ -107,7 +114,7 @@ function Overview({ state, b, act, onBack }: { state: GameState; b: Business; ac
             .filter((e) => e.sectorId === b.sectorId)
             .map((e) => (
               <p key={e.id} className="small">
-                📰 <strong>{e.title}</strong> — {e.description}
+                <strong>{e.title}</strong> — {e.description}
               </p>
             ))}
         </Section>

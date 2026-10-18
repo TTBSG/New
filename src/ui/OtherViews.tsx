@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { borrow, maxLoan, repay } from '../game/engine'
 import { SECTORS, getSector } from '../game/sectors'
 import type { GameState } from '../game/types'
 import { Section, Stat } from './common'
 import { eur } from './format'
+import { Icon, type IconName } from './icons'
 import type { Act } from './useGame'
 
 export function BankView({ state, act }: { state: GameState; act: Act }) {
@@ -42,7 +44,7 @@ export function BankView({ state, act }: { state: GameState; act: Act }) {
 
 const trendLabel = (v: number) => `${v >= 1 ? '+' : ''}${Math.round((v - 1) * 100)} %`
 
-export function MarketView({ state }: { state: GameState }) {
+function MarketView({ state }: { state: GameState }) {
   return (
     <>
       <div className="stats">
@@ -54,7 +56,10 @@ export function MarketView({ state }: { state: GameState }) {
             {SECTORS.map((s) => (
               <tr key={s.id}>
                 <td>
-                  {s.emoji} {s.name}
+                  <span className="inline-icon" style={{ color: s.color }}>
+                    <Icon name={s.id as IconName} size={16} />
+                  </span>{' '}
+                  {s.name}
                 </td>
                 <td className={`num ${state.sectorTrends[s.id] >= 1 ? 'good' : 'bad'}`}>{trendLabel(state.sectorTrends[s.id])}</td>
               </tr>
@@ -66,7 +71,7 @@ export function MarketView({ state }: { state: GameState }) {
         {state.events.length === 0 && <p className="muted">Rien de particulier.</p>}
         {state.events.map((e) => (
           <p key={e.id} className="small">
-            📰 <strong>{e.title}</strong> ({e.sectorId ? getSector(e.sectorId).name : 'tous secteurs'}, {trendLabel(e.demandMult)}, encore {e.endsDay - state.day + 1} j)
+            <strong>{e.title}</strong> ({e.sectorId ? getSector(e.sectorId).name : 'tous secteurs'}, {trendLabel(e.demandMult)}, encore {e.endsDay - state.day + 1} j)
             <br />
             <span className="muted">{e.description}</span>
           </p>
@@ -76,7 +81,7 @@ export function MarketView({ state }: { state: GameState }) {
   )
 }
 
-export function JournalView({ state, onRestart }: { state: GameState; onRestart: () => void }) {
+function JournalView({ state, onRestart }: { state: GameState; onRestart: () => void }) {
   return (
     <>
       <Section title="Journal">
@@ -89,6 +94,23 @@ export function JournalView({ state, onRestart }: { state: GameState; onRestart:
       <button className="btn danger block" onClick={() => confirm('Recommencer une nouvelle partie ? La partie en cours sera perdue.') && onRestart()}>
         Nouvelle partie
       </button>
+    </>
+  )
+}
+
+export function InfosView({ state, onRestart }: { state: GameState; onRestart: () => void }) {
+  const [tab, setTab] = useState<'marche' | 'journal'>('marche')
+  return (
+    <>
+      <div className="tabs" role="tablist">
+        <button role="tab" aria-selected={tab === 'marche'} className={tab === 'marche' ? 'active' : ''} onClick={() => setTab('marche')}>
+          Marché
+        </button>
+        <button role="tab" aria-selected={tab === 'journal'} className={tab === 'journal' ? 'active' : ''} onClick={() => setTab('journal')}>
+          Journal
+        </button>
+      </div>
+      {tab === 'marche' ? <MarketView state={state} /> : <JournalView state={state} onRestart={onRestart} />}
     </>
   )
 }

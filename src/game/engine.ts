@@ -1,7 +1,8 @@
-import { FIRST_NAMES, LAST_NAMES, LOCATIONS, RANDOM_EVENTS, SECTORS, SUPPLIERS, getLocation, getSector } from './sectors'
+import { generateCity, getParcel, parcelRent, parcelTraffic, isVacant } from './city'
+import { FIRST_NAMES, LAST_NAMES, RANDOM_EVENTS, SECTORS, SUPPLIERS, getSector } from './sectors'
 import type { Business, Candidate, DayReport, Employee, GameState, LogEntry, ProductState, SupplierTier } from './types'
 
-export const SAVE_VERSION = 1
+export const SAVE_VERSION = 2
 export const START_CASH = 60000
 const HISTORY_DAYS = 120
 const LOG_SIZE = 80
@@ -99,8 +100,9 @@ export function maxLoan(s: GameState): number {
   return Math.round(40000 + s.businesses.reduce((sum, b) => sum + businessValue(b) * 0.6, 0))
 }
 
-export function openingCost(sectorId: string, locationId: string): number {
-  return getSector(sectorId).setupCost + getLocation(locationId).rentMonthly * 2
+/** Aménagement + deux mois de loyer en caution. */
+export function openingCost(state: GameState, sectorId: string, parcelId: string): number {
+  return getSector(sectorId).setupCost + parcelRent(getParcel(state.city, parcelId)) * 2
 }
 
 /** Salaire attendu sur le marché pour un niveau de compétence donné. */
@@ -123,11 +125,13 @@ export function newGame(seed = Date.now() % 2147483647): GameState {
     economy: 1,
     sectorTrends: Object.fromEntries(SECTORS.map((x) => [x.id, 1])),
     events: [],
+    city: { size: 0, roads: [], parcels: [] },
     businesses: [],
     candidates: [],
     log: [],
     nextId: 1,
   }
+  s.city = generateCity(() => rand(s))
   refreshCandidates(s)
   log(s, `Bienvenue ! Vous démarrez avec ${START_CASH.toLocaleString('fr-FR')} €. Ouvrez votre première entreprise.`, 'good')
   return s
@@ -161,7 +165,7 @@ function refreshCandidates(s: GameState) {
 
 function simulateBusiness(s: GameState, b: Business): DayReport {
   const sector = getSector(b.sectorId)
-  const loc = getLocation(b.locationId)
+  const parcel = getParcel(s.city, b.parcelId)
 
   const eventMult = s.events
     .filter((e) => e.sectorId === null || e.sectorId === b.sectorId)
@@ -169,7 +173,7 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
   const marketingFactor = 1 + 0.5 * Math.log10(1 + b.marketingDaily / 10)
   const reputationFactor = 0.6 + b.reputation / 125
   const visitors = Math.round(
-    loc.traffic *
+    parcelTraffic(parcel) *
       sector.trafficMult *
       WEEKDAY_TRAFFIC[weekday(s.day)] *
       s.economy *
@@ -242,7 +246,7 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
   }
 
   const wages = monthlyWages(b) / 30
-  const rent = loc.rentMonthly / 30
+  const rent = parcelRent(parcel) / 30
   const marketing = b.marketingDaily
   s.cash -= wages + rent + marketing
 
@@ -309,7 +313,7 @@ function updateMarket(s: GameState) {
         endsDay: s.day + duration,
       })
       const scope = tpl.sector ? getSector(tpl.sector).name : 'tous les secteurs'
-      log(s, `📰 ${tpl.title} : ${tpl.description} (${scope}, ${mult > 1 ? '+' : ''}${Math.round((mult - 1) * 100)} % de demande, ${duration} j)`, mult > 1 ? 'good' : 'bad')
+      log(s, `${tpl.title} : ${tpl.description} (${scope}, ${mult > 1 ? '+' : ''}${Math.round((mult - 1) * 100)} % de demande, ${duration} j)`, mult > 1 ? 'good' : 'bad')
     }
   }
 }
@@ -326,10 +330,10 @@ export function tick(state: GameState): GameState {
 
     if (s.cash < 0) {
       s.daysInDebt++
-      if (s.daysInDebt === 1) log(s, `⚠️ Trésorerie négative ! Vous avez ${BANKRUPTCY_DAYS} jours pour redresser la barre.`, 'bad')
+      if (s.daysInDebt === 1) log(s, `Trésorerie négative ! Vous avez ${BANKRUPTCY_DAYS} jours pour redresser la barre.`, 'bad')
       if (s.daysInDebt >= BANKRUPTCY_DAYS) {
         s.gameOver = true
-        log(s, '💀 Faillite : votre trésorerie est restée négative trop longtemps.', 'bad')
+        log(s, 'Faillite : votre trésorerie est restée négative trop longtemps.', 'bad')
       }
     } else {
       s.daysInDebt = 0
@@ -339,18 +343,20 @@ export function tick(state: GameState): GameState {
 
 // ---------- Actions du joueur ----------
 
-export function openBusiness(state: GameState, sectorId: string, locationId: string, name: string): GameState {
-  const cost = openingCost(sectorId, locationId)
+export function openBusiness(state: GameState, sectorId: string, parcelId: string, name: string): GameState {
+  const parcel = state.city.parcels.find((p) => p.id === parcelId)
+  if (!parcel || !isVacant(parcel, state.businesses)) return state
+  const cost = openingCost(state, sectorId, parcelId)
   if (state.cash < cost) return state
   return update(state, (s) => {
     const sector = getSector(sectorId)
-    const loc = getLocation(locationId)
+    const traffic = parcelTraffic(parcel)
     s.cash -= cost
     const b: Business = {
       id: newId(s, 'b'),
-      name: name.trim() || `${sector.name} ${loc.name}`,
+      name: name.trim() || `${sector.name} ${parcel.address}`,
       sectorId,
-      locationId,
+      parcelId,
       openedDay: s.day,
       employees: [],
       marketingDaily: 0,
@@ -361,7 +367,7 @@ export function openBusiness(state: GameState, sectorId: string, locationId: str
         price: p.refPrice,
         stock: 0,
         supplier: 'standard' as SupplierTier,
-        restockTarget: Math.max(1, Math.ceil(loc.traffic * sector.trafficMult * p.baseShare * 1.5)),
+        restockTarget: Math.max(1, Math.ceil(traffic * sector.trafficMult * p.baseShare * 1.5)),
       })),
     }
     // Stock de départ.
@@ -373,7 +379,7 @@ export function openBusiness(state: GameState, sectorId: string, locationId: str
       }
     }
     s.businesses.push(b)
-    log(s, `${sector.emoji} ${b.name} ouvre ses portes ! Pensez à recruter du personnel.`, 'good')
+    log(s, `${b.name} (${sector.name}) ouvre ses portes au ${parcel.address} ! Pensez à recruter du personnel.`, 'good')
   })
 }
 
@@ -477,4 +483,3 @@ export function repay(state: GameState, amount: number): GameState {
   })
 }
 
-export { LOCATIONS, SECTORS }

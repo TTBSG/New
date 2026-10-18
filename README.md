@@ -21,8 +21,8 @@ Ouvrez ensuite l'adresse affichée (par exemple http://localhost:5173) dans le n
 
 ## Ce que contient le prototype
 
+- **Une ville isométrique** de 4 quartiers. Chaque local à louer a son adresse, son loyer et sa fréquentation. On se déplace au doigt, on zoome à deux doigts, et des calques « Fréquentation » et « Loyers » aident à choisir l'emplacement.
 - **6 secteurs** : café, boulangerie, restaurant, boutique de vêtements, magasin d'électronique et supérette.
-- **4 emplacements**, avec chacun son loyer et sa fréquentation.
 - **Produits** : prix de vente, fournisseur (Économique, Standard ou Premium, qui changent la qualité et le coût) et stock cible avec réapprovisionnement automatique.
 - **Équipe** : recrutement de candidats renouvelés chaque lundi, compétence, moral, salaires, licenciements avec indemnité, managers et démissions.
 - **Clients** : demande calculée selon le prix, la qualité, la réputation, le marketing, le jour de la semaine, la conjoncture et des événements aléatoires.
@@ -34,9 +34,13 @@ Ouvrez ensuite l'adresse affichée (par exemple http://localhost:5173) dans le n
 | Fichier | Rôle |
 |---|---|
 | `src/game/sectors.ts` | Données du jeu (secteurs, produits, métiers, emplacements, événements). Pour **ajouter un secteur**, il suffit d'ajouter une entrée ici. |
+| `src/game/city.ts` | Génération de la ville (parcelles, rues, adresses, loyers, fréquentation). |
 | `src/game/engine.ts` | Moteur de simulation (journée, clients, stocks, employés, banque). |
 | `src/game/engine.test.ts` | Tests automatiques du moteur (`npm test`). |
 | `src/ui/` | Écrans de l'application. |
+| `src/ui/city/` | Rendu isométrique de la ville et gestes (glisser, pincer, toucher). |
+| `src/ui/icons.tsx` | Jeu d'icônes maison. |
+| `src/index.css` | Charte graphique (couleurs, formes, composants). |
 
 ## Commandes
 

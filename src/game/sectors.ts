@@ -1,4 +1,4 @@
-import type { LocationDef, SectorDef, SupplierTier } from './types'
+import type { DistrictDef, SectorDef, SupplierTier } from './types'
 
 const manager = { id: 'manager', name: 'Manager', baseSalary: 3200, capacity: 0 }
 
@@ -6,7 +6,7 @@ export const SECTORS: SectorDef[] = [
   {
     id: 'cafe',
     name: 'Café',
-    emoji: '☕',
+    color: '#8c5a3c',
     description: 'Petites marges, gros volumes. La rapidité du service fait tout.',
     setupCost: 15000,
     trafficMult: 1,
@@ -22,7 +22,7 @@ export const SECTORS: SectorDef[] = [
   {
     id: 'boulangerie',
     name: 'Boulangerie',
-    emoji: '🥖',
+    color: '#d9963b',
     description: 'Clientèle fidèle de quartier. La qualité des produits fait la réputation.',
     setupCost: 25000,
     trafficMult: 1.1,
@@ -38,7 +38,7 @@ export const SECTORS: SectorDef[] = [
   {
     id: 'restaurant',
     name: 'Restaurant',
-    emoji: '🍽️',
+    color: '#c94f4f',
     description: 'Tickets élevés mais beaucoup de personnel. Attention à la masse salariale.',
     setupCost: 60000,
     trafficMult: 0.55,
@@ -54,7 +54,7 @@ export const SECTORS: SectorDef[] = [
   {
     id: 'vetements',
     name: 'Boutique de vêtements',
-    emoji: '👕',
+    color: '#5c8de8',
     description: 'Fortes marges, clients exigeants sur le prix et la qualité.',
     setupCost: 40000,
     trafficMult: 0.9,
@@ -70,7 +70,7 @@ export const SECTORS: SectorDef[] = [
   {
     id: 'electronique',
     name: 'Magasin d\'électronique',
-    emoji: '📱',
+    color: '#4a4f5c',
     description: 'Gros tickets, petites marges sur le matériel. Le stock immobilise beaucoup de cash.',
     setupCost: 80000,
     trafficMult: 0.7,
@@ -86,7 +86,7 @@ export const SECTORS: SectorDef[] = [
   {
     id: 'superette',
     name: 'Supérette',
-    emoji: '🛒',
+    color: '#3fa565',
     description: 'Énormément de références, marges faibles, gestion des stocks cruciale.',
     setupCost: 50000,
     trafficMult: 1.3,
@@ -101,7 +101,7 @@ export const SECTORS: SectorDef[] = [
   },
 ]
 
-export const LOCATIONS: LocationDef[] = [
+export const DISTRICTS: DistrictDef[] = [
   { id: 'residentiel', name: 'Quartier résidentiel', rentMonthly: 1200, traffic: 230 },
   { id: 'commercial', name: 'Zone commerciale', rentMonthly: 2600, traffic: 430 },
   { id: 'centre', name: 'Centre-ville', rentMonthly: 3800, traffic: 560 },
@@ -120,10 +120,10 @@ export function getSector(id: string): SectorDef {
   return s
 }
 
-export function getLocation(id: string): LocationDef {
-  const l = LOCATIONS.find((x) => x.id === id)
-  if (!l) throw new Error(`Emplacement inconnu : ${id}`)
-  return l
+export function getDistrict(id: string): DistrictDef {
+  const d = DISTRICTS.find((x) => x.id === id)
+  if (!d) throw new Error(`Quartier inconnu : ${id}`)
+  return d
 }
 
 export const FIRST_NAMES = ['Léa', 'Hugo', 'Emma', 'Lucas', 'Chloé', 'Nathan', 'Inès', 'Yanis', 'Manon', 'Karim', 'Sarah', 'Théo', 'Camille', 'Mehdi', 'Julie', 'Antoine', 'Aïcha', 'Louis', 'Zoé', 'Samuel']
