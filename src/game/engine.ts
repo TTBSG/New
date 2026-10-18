@@ -1,4 +1,5 @@
-import { dailyMessages, fairSalary, welcomeMessage } from './messages'
+import { advisorMessage, dailyMessages, fairSalary, welcomeMessage } from './messages'
+import { STARTING_SECTORS, checkObjectives, isSectorUnlocked, setNetWorth } from './objectives'
 import { generateCity, getParcel, parcelRent, parcelTraffic, isVacant } from './city'
 import { FIRST_NAMES, LAST_NAMES, RANDOM_EVENTS, SECTORS, SUPPLIERS, getSector } from './sectors'
 import type { Business, Candidate, DayReport, Employee, GameState, ProductState, SupplierTier } from './types'
@@ -7,7 +8,7 @@ import { clamp, log, newId, pick, rand, randRange, round2, update } from './util
 export { rand }
 export { fairSalary }
 
-export const SAVE_VERSION = 3
+export const SAVE_VERSION = 4
 export const START_CASH = 60000
 const HISTORY_DAYS = 120
 const BANKRUPTCY_DAYS = 30
@@ -74,6 +75,13 @@ export function netWorth(s: GameState): number {
   return s.cash - s.loan + s.businesses.reduce((sum, b) => sum + businessValue(b), 0)
 }
 
+setNetWorth(netWorth)
+
+/** Valide les objectifs et fait annoncer les nouveaux rangs par la conseillère. */
+function progress(s: GameState) {
+  for (const lines of checkObjectives(s)) advisorMessage(s, lines)
+}
+
 export function maxLoan(s: GameState): number {
   return Math.round(40000 + s.businesses.reduce((sum, b) => sum + businessValue(b) * 0.6, 0))
 }
@@ -104,6 +112,10 @@ export function newGame(seed = Date.now() % 2147483647): GameState {
     log: [],
     inbox: [],
     flags: {},
+    stats: { totalProfit: 0, totalRevenue: 0 },
+    objectivesDone: [],
+    unlockedSectors: [...STARTING_SECTORS],
+    celebrations: [],
     nextId: 1,
   }
   s.city = generateCity(() => rand(s))
@@ -259,7 +271,10 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
     rent: round2(rent),
     marketing,
     profit: round2(grossMargin - wages - rent - marketing),
+    reputation: round2(b.reputation),
   }
+  s.stats.totalProfit += report.profit
+  s.stats.totalRevenue += report.revenue
   b.history.push(report)
   if (b.history.length > HISTORY_DAYS) b.history.splice(0, b.history.length - HISTORY_DAYS)
   return report
@@ -315,6 +330,7 @@ export function tick(state: GameState): GameState {
       s.daysInDebt = 0
     }
     dailyMessages(s)
+    progress(s)
   })
 }
 
@@ -322,7 +338,7 @@ export function tick(state: GameState): GameState {
 
 export function openBusiness(state: GameState, sectorId: string, parcelId: string, name: string): GameState {
   const parcel = state.city.parcels.find((p) => p.id === parcelId)
-  if (!parcel || !isVacant(parcel, state.businesses)) return state
+  if (!parcel || !isVacant(parcel, state.businesses) || !isSectorUnlocked(state, sectorId)) return state
   const cost = openingCost(state, sectorId, parcelId)
   if (state.cash < cost) return state
   return update(state, (s) => {
@@ -358,6 +374,7 @@ export function openBusiness(state: GameState, sectorId: string, parcelId: strin
     }
     s.businesses.push(b)
     log(s, `${b.name} (${sector.name}) ouvre ses portes au ${parcel.address} ! Pensez à recruter du personnel.`, 'good')
+    progress(s)
   })
 }
 
@@ -402,6 +419,7 @@ export function hire(state: GameState, businessId: string, candidateId: string):
     const e: Employee = { id: c.id, name: c.name, roleId: c.roleId, skill: c.skill, salary: c.salary, morale: 65, hiredDay: s.day }
     b.employees.push(e)
     log(s, `${e.name} rejoint ${b.name}.`)
+    progress(s)
   })
 }
 
@@ -471,5 +489,40 @@ export function migrate(raw: GameState): GameState | null {
     for (const b of s.businesses) b.rentMult = 1
     s.version = 3
   }
+  if (s.version === 3) {
+    s.stats = { totalProfit: 0, totalRevenue: 0 }
+    for (const b of s.businesses)
+      for (const r of b.history) {
+        s.stats.totalProfit += r.profit
+        s.stats.totalRevenue += r.revenue
+      }
+    s.unlockedSectors = [...new Set([...STARTING_SECTORS, ...s.businesses.map((b) => b.sectorId)])]
+    s.objectivesDone = []
+    s.celebrations = []
+    // Partie déjà lancée : pas besoin du tutoriel.
+    if (s.businesses.length) s.flags.tuto_done = true
+    // Les objectifs déjà remplis sont validés d'office, sans avalanche de célébrations.
+    progress(s)
+    s.celebrations = []
+    advisorMessage(s, [
+      'Nouveau : l\'appli Objectifs est arrivée sur votre téléphone !',
+      'Chaque rang atteint rapporte une prime et débloque de nouveaux secteurs. J\'ai déjà validé ce que vous avez accompli.',
+    ])
+    s.version = 4
+  }
   return s.version === SAVE_VERSION ? s : null
+}
+
+export function dismissCelebration(state: GameState): GameState {
+  if (!state.celebrations.length) return state
+  return update(state, (s) => {
+    s.celebrations.shift()
+  })
+}
+
+export function setFlag(state: GameState, flag: string): GameState {
+  if (state.flags[flag]) return state
+  return update(state, (s) => {
+    s.flags[flag] = true
+  })
 }

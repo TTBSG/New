@@ -44,10 +44,10 @@ export const SECTORS: SectorDef[] = [
     trafficMult: 0.55,
     priceElasticity: 1.2,
     products: [
-      { id: 'menu', name: 'Menu du jour', unitCost: 5.5, refPrice: 16, baseShare: 0.14 },
-      { id: 'carte', name: 'Plat à la carte', unitCost: 8, refPrice: 22, baseShare: 0.08 },
-      { id: 'dessert', name: 'Dessert', unitCost: 1.8, refPrice: 7, baseShare: 0.09 },
-      { id: 'vin', name: 'Verre de vin', unitCost: 1.5, refPrice: 6, baseShare: 0.1 },
+      { id: 'menu', name: 'Menu du jour', unitCost: 5.5, refPrice: 16, baseShare: 0.119 },
+      { id: 'carte', name: 'Plat à la carte', unitCost: 8, refPrice: 22, baseShare: 0.068 },
+      { id: 'dessert', name: 'Dessert', unitCost: 1.8, refPrice: 7, baseShare: 0.0765 },
+      { id: 'vin', name: 'Verre de vin', unitCost: 1.5, refPrice: 6, baseShare: 0.085 },
     ],
     roles: [{ id: 'serveur', name: 'Serveur / Cuisinier', baseSalary: 2100, capacity: 45 }, manager],
   },
@@ -60,10 +60,10 @@ export const SECTORS: SectorDef[] = [
     trafficMult: 0.9,
     priceElasticity: 1.8,
     products: [
-      { id: 'tshirt', name: 'T-shirt', unitCost: 6, refPrice: 22, baseShare: 0.025 },
-      { id: 'jean', name: 'Jean', unitCost: 18, refPrice: 65, baseShare: 0.0125 },
-      { id: 'veste', name: 'Veste', unitCost: 35, refPrice: 120, baseShare: 0.006 },
-      { id: 'accessoire', name: 'Accessoire', unitCost: 4, refPrice: 15, baseShare: 0.02 },
+      { id: 'tshirt', name: 'T-shirt', unitCost: 6, refPrice: 22, baseShare: 0.0155 },
+      { id: 'jean', name: 'Jean', unitCost: 18, refPrice: 65, baseShare: 0.0077 },
+      { id: 'veste', name: 'Veste', unitCost: 35, refPrice: 120, baseShare: 0.0037 },
+      { id: 'accessoire', name: 'Accessoire', unitCost: 4, refPrice: 15, baseShare: 0.0124 },
     ],
     roles: [{ id: 'conseiller', name: 'Conseiller de vente', baseSalary: 1950, capacity: 35 }, manager],
   },
@@ -97,7 +97,7 @@ export const SECTORS: SectorDef[] = [
       { id: 'boissons', name: 'Boissons', unitCost: 0.9, refPrice: 1.8, baseShare: 0.35 },
       { id: 'hygiene', name: 'Hygiène', unitCost: 2.5, refPrice: 4.5, baseShare: 0.12 },
     ],
-    roles: [{ id: 'caissier', name: 'Employé libre-service', baseSalary: 1850, capacity: 180 }, manager],
+    roles: [{ id: 'caissier', name: 'Employé libre-service', baseSalary: 1850, capacity: 250 }, manager],
   },
 ]
 

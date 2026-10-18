@@ -16,6 +16,7 @@ function lotIn(s: GameState, districtId: string) {
 
 function staffed(sectorId: string, districtId: string, staff: number, seed = 42) {
   let s = newGame(seed)
+  s = { ...s, unlockedSectors: SECTORS.map((x) => x.id) }
   s = borrow(s, 100000)
   s = openBusiness(s, sectorId, lotIn(s, districtId), 'Test')
   const b = s.businesses[0]

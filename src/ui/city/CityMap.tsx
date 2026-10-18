@@ -73,6 +73,34 @@ const Objects = memo(function Objects({ city, shops, faded }: { city: City; shop
   )
 })
 
+const WALKER_COLORS = ['#5c8de8', '#d65db1', '#4cb86b', '#f2b134', '#e8743b', '#8a6142']
+
+/** Passants qui font des allers-retours devant une boutique : plus elle est fréquentée, plus il y en a. */
+const Walkers = memo(function Walkers({ i, j, visitors }: { i: number; j: number; visitors: number }) {
+  const count = visitors > 0 ? Math.min(5, Math.max(1, Math.round(visitors / 110))) : 0
+  const [ax, ay] = P(i + 0.06, j + 1.1)
+  const [bx, by] = P(i + 0.94, j + 1.1)
+  return (
+    <g pointerEvents="none">
+      {Array.from({ length: count }, (_, k) => {
+        const dur = 6 + ((i * 7 + j * 3 + k * 5) % 5)
+        return (
+          <g key={k}>
+            <rect x={-2.5} y={-9} width={5} height={7} rx={2} fill={WALKER_COLORS[(i + j + k) % WALKER_COLORS.length]} />
+            <circle cx={0} cy={-11} r={2.6} fill="#f1c9a5" />
+            <animateMotion
+              dur={`${dur}s`}
+              begin={`-${(k * dur) / count}s`}
+              repeatCount="indefinite"
+              path={`M${ax.toFixed(1)},${ay.toFixed(1)} L${bx.toFixed(1)},${by.toFixed(1)} L${ax.toFixed(1)},${ay.toFixed(1)}`}
+            />
+          </g>
+        )
+      })}
+    </g>
+  )
+})
+
 const DISTRICT_LABELS: [number, number, string][] = [
   [3.5, 3.5, 'RÉSIDENTIEL'],
   [9.5, 3.5, 'AFFAIRES'],
@@ -147,8 +175,12 @@ export function CityMap({
   }
 
   const onPointerDown = (e: RPointerEvent) => {
-    ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
     pointers.current.set(e.pointerId, local(e))
+    try {
+      ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
+    } catch {
+      // Sans capture, le geste fonctionne tant que le doigt reste sur la carte.
+    }
     if (pointers.current.size === 1) gesture.current.moved = 0
     if (pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()]
@@ -228,6 +260,9 @@ export function CityMap({
                 </g>
               )
             })}
+            {businesses.map((b) => (
+              <Walkers key={b.id} i={parcelsById[b.parcelId].i} j={parcelsById[b.parcelId].j} visitors={b.history.at(-1)?.visitors ?? 0} />
+            ))}
             {businesses.map((b) => {
               const p = parcelsById[b.parcelId]
               const [x, y] = P(p.i + 0.5, p.j + 0.5, SHOP_HEIGHT + 14)

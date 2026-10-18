@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getParcel, isVacant, parcelRent, parcelTraffic } from '../game/city'
 import { openBusiness, openingCost, serviceCapacity } from '../game/engine'
+import { isSectorUnlocked, sectorUnlockRank } from '../game/objectives'
 import { SECTORS, getDistrict, getSector } from '../game/sectors'
 import type { GameState } from '../game/types'
 import { CityMap, type Overlay } from './city/CityMap'
@@ -63,14 +64,6 @@ export function CityView({
         </div>
       )}
 
-      {!parcel && state.businesses.length === 0 && (
-        <div className="map-hint">
-          <Icon name="key" size={18} />
-          <span>
-            Touchez un local <strong>« À louer »</strong> pour ouvrir votre premier commerce.
-          </span>
-        </div>
-      )}
 
       {parcel && (
         <div className="sheet docked">
@@ -158,6 +151,7 @@ export function CityView({
               onOpen={(sectorId, name) => {
                 act(openBusiness, sectorId, parcel.id, name)
                 setPicking(false)
+                setSelectedId(null)
                 setOverlay('none')
               }}
             />
@@ -207,8 +201,9 @@ function SectorPicker({
           {SECTORS.map((s) => {
             const cost = openingCost(state, s.id, parcelId)
             const tooExpensive = cost > state.cash
+            const locked = !isSectorUnlocked(state, s.id)
             return (
-              <button key={s.id} className="choice" disabled={tooExpensive} onClick={() => setSectorId(s.id)}>
+              <button key={s.id} className={`choice ${locked ? 'is-locked' : ''}`} disabled={tooExpensive || locked} onClick={() => setSectorId(s.id)}>
                 <span className="sector-badge" style={{ background: s.color }}>
                   <Icon name={s.id as IconName} size={20} />
                 </span>
@@ -216,7 +211,13 @@ function SectorPicker({
                   <strong>{s.name}</strong>
                   <span className="muted small">{s.description}</span>
                 </span>
-                <span className={`small strong ${tooExpensive ? 'bad' : ''}`}>{eur(cost)}</span>
+                {locked ? (
+                  <span className="small strong lock-note">
+                    <Icon name="lock" size={14} /> Rang {sectorUnlockRank(s.id) + 1}
+                  </span>
+                ) : (
+                  <span className={`small strong ${tooExpensive ? 'bad' : ''}`}>{eur(cost)}</span>
+                )}
               </button>
             )
           })}

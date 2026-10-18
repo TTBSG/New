@@ -108,6 +108,8 @@ export interface DayReport {
   rent: number
   marketing: number
   profit: number
+  /** Réputation en fin de journée (absente des anciennes sauvegardes). */
+  reputation?: number
 }
 
 export interface Business {
@@ -182,6 +184,14 @@ export interface Conversation {
   lastDay: number
 }
 
+/** Célébration à afficher (objectif atteint, nouveau rang). */
+export interface Celebration {
+  id: string
+  title: string
+  prime: number
+  rankUp: number | null
+}
+
 export interface GameState {
   version: number
   seed: number
@@ -201,7 +211,11 @@ export interface GameState {
   candidates: Candidate[]
   log: LogEntry[]
   inbox: Conversation[]
-  /** Conseils déjà envoyés, pour ne pas les répéter. */
+  /** Conseils déjà envoyés, étapes du tutoriel… */
   flags: Record<string, boolean>
+  stats: { totalProfit: number; totalRevenue: number }
+  objectivesDone: string[]
+  unlockedSectors: string[]
+  celebrations: Celebration[]
   nextId: number
 }

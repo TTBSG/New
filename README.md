@@ -24,6 +24,9 @@ Ouvrez ensuite l'adresse affichée (par exemple http://localhost:5173) dans le n
 - **Une ville isométrique** de 4 quartiers. Chaque local à louer a son adresse, son loyer et sa fréquentation. On se déplace au doigt, on zoome à deux doigts, et des calques « Fréquentation » et « Loyers » aident à choisir l'emplacement.
 - **Le téléphone du jeu** : toute la gestion passe par des applis (Messages, Commerces, Banque, Compta, Recrut', Actus, Réglages), avec un widget de trésorerie et des notifications. D'autres applis sont prévues (Fournisseurs, Immo, Bourse, Logistique).
 - **Messages et décisions** : employés qui demandent une augmentation, fournisseurs qui proposent des affaires, propriétaires qui augmentent le loyer, presse, conseils de démarrage. Chaque choix a des conséquences, et une demande ignorée finit par expirer. Le jeu se met en pause quand une décision arrive.
+- **Objectifs et rangs** : 5 rangs (de « Premiers pas » à « Empire ») avec des objectifs, des primes et des secteurs à débloquer (au départ : café, boulangerie et supérette).
+- **Tutoriel guidé** en 4 étapes, et un **diagnostic** de chaque commerce qui explique ce qui va et ce qui coince.
+- **Sauvegarde** automatique, avec export et import d'un fichier depuis l'appli Réglages.
 - **6 secteurs** : café, boulangerie, restaurant, boutique de vêtements, magasin d'électronique et supérette.
 - **Produits** : prix de vente, fournisseur (Économique, Standard ou Premium, qui changent la qualité et le coût) et stock cible avec réapprovisionnement automatique.
 - **Équipe** : recrutement de candidats renouvelés chaque lundi, compétence, moral, salaires, licenciements avec indemnité, managers et démissions.
@@ -38,6 +41,8 @@ Ouvrez ensuite l'adresse affichée (par exemple http://localhost:5173) dans le n
 | `src/game/sectors.ts` | Données du jeu (secteurs, produits, métiers, emplacements, événements). Pour **ajouter un secteur**, il suffit d'ajouter une entrée ici. |
 | `src/game/city.ts` | Génération de la ville (parcelles, rues, adresses, loyers, fréquentation). |
 | `src/game/messages.ts` | Messagerie : événements, choix et conséquences. |
+| `src/game/objectives.ts` | Objectifs, rangs et déblocages. |
+| `src/game/diagnose.ts` | Diagnostic d'un commerce. |
 | `src/game/engine.ts` | Moteur de simulation (journée, clients, stocks, employés, banque). |
 | `src/game/engine.test.ts` | Tests automatiques du moteur (`npm test`). |
 | `src/ui/` | Écrans de l'application. |

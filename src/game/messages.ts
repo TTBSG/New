@@ -65,6 +65,10 @@ export function welcomeMessage(s: GameState) {
   s.flags.welcome = true
 }
 
+export function advisorMessage(s: GameState, lines: string[]) {
+  send(s, 'advisor', ADVISOR, lines)
+}
+
 function advise(s: GameState, flag: string, lines: string[]) {
   if (s.flags[flag]) return
   s.flags[flag] = true
@@ -239,8 +243,9 @@ function expireRequests(s: GameState) {
     } else {
       reply(c, 'them', 'L\'offre a expiré.', s.day)
     }
+    // Une simple offre expirée n'a pas besoin d'attirer l'attention ; une conséquence, si.
+    c.unread = c.kind === 'landlord' || c.kind === 'raise'
     c.choices = []
-    c.unread = true
   }
 }
 

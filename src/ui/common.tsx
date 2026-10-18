@@ -49,20 +49,23 @@ export function NumberField({
   suffix?: string
   decimals?: number
 }) {
-  const [text, setText] = useState(value.toFixed(decimals))
-  useEffect(() => setText(value.toFixed(decimals)), [value, decimals])
+  // Affichage à la française : virgule décimale.
+  const show = (v: number) => v.toFixed(decimals).replace('.', ',')
+  const [text, setText] = useState(show(value))
+  useEffect(() => setText(show(value)), [value, decimals])
   const commit = (v: number) => {
     const clean = Math.max(min, Number.isFinite(v) ? v : value)
     onChange(Number(clean.toFixed(decimals)))
-    setText(clean.toFixed(decimals))
+    setText(show(clean))
   }
   return (
     <div className="numfield">
       <button type="button" onClick={() => commit(value - step)} aria-label="Diminuer">−</button>
       <input
-        inputMode="decimal"
+        inputMode={decimals > 0 ? 'decimal' : 'numeric'}
         value={text}
         onChange={(e) => setText(e.target.value)}
+        onFocus={(e) => e.target.select()}
         onBlur={() => commit(parseFloat(text.replace(',', '.')))}
         onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
       />

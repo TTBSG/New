@@ -18,6 +18,7 @@ import {
   unitCost,
 } from '../game/engine'
 import { getParcel } from '../game/city'
+import { diagnose } from '../game/diagnose'
 import { SUPPLIERS, getSector } from '../game/sectors'
 import type { Business, GameState, SupplierTier } from '../game/types'
 import { BarChart, Meter, NumberField, Section, Stat } from './common'
@@ -68,23 +69,19 @@ export function BusinessView({ state, business: b, act, onBack }: { state: GameS
 function Overview({ state, b, act, onBack }: { state: GameState; b: Business; act: Act; onBack?: () => void }) {
   const last = b.history.at(-1)
   const capacity = serviceCapacity(b)
-  const alerts: string[] = []
-  if (capacity === 0) alerts.push("Aucun employé : l'entreprise ne peut servir personne. Recrutez dans l'onglet Équipe.")
-  if (last && capacity > 0 && last.lostToCapacity > last.demand * 0.05)
-    alerts.push(`${num(last.lostToCapacity)} ventes perdues hier faute de personnel. Recrutez ou améliorez le moral.`)
-  if (last && last.lostToStockout > last.demand * 0.05)
-    alerts.push(`${num(last.lostToStockout)} ventes perdues hier par rupture de stock. Augmentez le stock cible.`)
-  const unhappy = b.employees.filter((e) => e.morale < 35)
-  if (unhappy.length) alerts.push(`${unhappy.length} employé(s) démotivé(s), risque de démission.`)
+  const insights = diagnose(state, b)
 
   const recent = b.history.slice(-30)
   return (
     <>
-      {alerts.map((a) => (
-        <div key={a} className="alert">
-          <Icon name="alert" size={18} /> <span>{a}</span>
-        </div>
-      ))}
+      <Section title="Diagnostic">
+        {insights.map((i) => (
+          <div key={i.text} className={`insight ${i.tone}`}>
+            <Icon name={i.tone === 'good' ? 'check' : 'alert'} size={16} />
+            <span>{i.text}</span>
+          </div>
+        ))}
+      </Section>
       <div className="stats">
         <Stat label="Réputation" value={`${Math.round(b.reputation)}/100`} hint={<Meter value={b.reputation} label="Réputation" />} />
         <Stat label="Visiteurs hier" value={last ? num(last.visitors) : '—'} />

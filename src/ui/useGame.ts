@@ -44,7 +44,12 @@ export function useGame() {
     setState(newGame())
   }, [])
 
-  return { state, act, speed, setSpeed, restart }
+  const replace = useCallback((s: GameState) => {
+    setSpeed(0)
+    setState(s)
+  }, [])
+
+  return { state, act, speed, setSpeed, restart, replace }
 }
 
 export type Act = ReturnType<typeof useGame>['act']

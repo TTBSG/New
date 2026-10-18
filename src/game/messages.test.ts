@@ -70,8 +70,9 @@ describe('messages', () => {
     delete old.inbox
     delete old.flags
     const migrated = migrate(old as unknown as GameState)!
-    expect(migrated.version).toBe(3)
-    expect(migrated.inbox).toEqual([])
+    expect(migrated.version).toBe(4)
+    expect(migrated.objectivesDone).toContain('open_first')
+    expect(migrated.inbox).toHaveLength(1)
     expect(migrated.businesses[0].rentMult).toBe(1)
     expect(() => tick(migrated)).not.toThrow()
   })

@@ -1,5 +1,6 @@
 import { getParcel } from '../../game/city'
-import { businessValue, hire, monthlyWages, netWorth, serviceCapacity } from '../../game/engine'
+import { useRef, useState } from 'react'
+import { businessValue, hire, migrate, monthlyWages, netWorth, serviceCapacity } from '../../game/engine'
 import { getSector } from '../../game/sectors'
 import type { Business, GameState } from '../../game/types'
 import { BarChart, Section, Stat } from '../common'
@@ -159,11 +160,62 @@ export function RecrutApp({ state, act }: { state: GameState; act: Act }) {
 
 // ---------- Réglages ----------
 
-export function SettingsApp({ onRestart }: { onRestart: () => void }) {
+export function SettingsApp({ state, onRestart, onImport }: { state: GameState; onRestart: () => void; onImport: (s: GameState) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [note, setNote] = useState<string | null>(null)
+
+  const exportSave = () => {
+    const blob = new Blob([JSON.stringify(state)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `business-empire-jour-${state.day}.json`
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    setNote('Sauvegarde exportée. Gardez ce fichier précieusement !')
+  }
+
+  const importSave = async (file: File) => {
+    try {
+      const loaded = migrate(JSON.parse(await file.text()) as GameState)
+      if (!loaded) throw new Error('version')
+      if (confirm(`Charger la partie du jour ${loaded.day} ? La partie en cours sera remplacée.`)) {
+        onImport(loaded)
+        setNote('Partie chargée.')
+      }
+    } catch {
+      setNote("Ce fichier n'est pas une sauvegarde valide.")
+    }
+  }
+
   return (
     <>
+      <Section title="Sauvegarde">
+        <p className="muted small">
+          La partie est sauvegardée automatiquement sur cet appareil. Exportez-la pour la garder en lieu sûr ou la transférer sur un autre téléphone.
+        </p>
+        <div className="row">
+          <button className="btn grow" onClick={exportSave}>
+            <Icon name="download" size={18} /> Exporter
+          </button>
+          <button className="btn grow" onClick={() => fileRef.current?.click()}>
+            <Icon name="upload" size={18} /> Importer
+          </button>
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            if (f) void importSave(f)
+            e.target.value = ''
+          }}
+        />
+        {note && <p className="small strong">{note}</p>}
+      </Section>
       <Section title="Partie">
-        <p className="muted small">La partie est sauvegardée automatiquement sur cet appareil.</p>
         <button className="btn danger block" onClick={() => confirm('Recommencer une nouvelle partie ? La partie en cours sera perdue.') && onRestart()}>
           Nouvelle partie
         </button>

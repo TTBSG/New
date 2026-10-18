@@ -8,8 +8,11 @@ import { BankView, InfosView } from '../OtherViews'
 import type { Act } from '../useGame'
 import { CommercesApp, ComptaApp, RecrutApp, SettingsApp, businessAlerts } from './apps'
 import { Avatar, MessagesApp, needsAttention } from './MessagesApp'
+import { ObjectivesApp } from './ObjectivesApp'
+import { activeObjectives, currentRank, rankTitle } from '../../game/objectives'
+import { Meter } from '../common'
 
-export type AppId = 'messages' | 'commerces' | 'banque' | 'compta' | 'recrut' | 'actus' | 'reglages'
+export type AppId = 'messages' | 'commerces' | 'banque' | 'compta' | 'recrut' | 'actus' | 'reglages' | 'objectifs' | 'avenir'
 
 export interface PhoneRoute {
   app: AppId | null
@@ -32,15 +35,17 @@ const APPS: Record<AppId, AppDef> = {
   recrut: { id: 'recrut', name: "Recrut'", icon: 'people', color: '#f2b134' },
   actus: { id: 'actus', name: 'Actus', icon: 'news', color: '#4cb8c4' },
   reglages: { id: 'reglages', name: 'Réglages', icon: 'gear', color: '#8a8f99' },
+  objectifs: { id: 'objectifs', name: 'Objectifs', icon: 'trophy', color: '#e0a21b' },
+  avenir: { id: 'avenir', name: 'À venir', icon: 'lock', color: '#b08f80' },
 }
-const GRID: AppId[] = ['compta', 'recrut', 'actus', 'reglages']
+const GRID: AppId[] = ['objectifs', 'compta', 'recrut', 'actus', 'reglages']
 const DOCK: AppId[] = ['messages', 'commerces', 'banque']
 /** Applis des prochaines mises à jour, affichées verrouillées pour montrer la progression. */
-const LOCKED: { name: string; icon: IconName }[] = [
-  { name: 'Fournisseurs', icon: 'box' },
-  { name: 'Immo', icon: 'key' },
-  { name: 'Bourse', icon: 'trendUp' },
-  { name: 'Logistique', icon: 'truck' },
+const LOCKED: { name: string; icon: IconName; rank: number; text: string }[] = [
+  { name: 'Fournisseurs', icon: 'box', rank: 3, text: 'Comparez les fournisseurs, négociez les prix, gérez les délais de livraison et les produits frais qui périment.' },
+  { name: 'Immo', icon: 'key', rank: 4, text: 'Achetez les murs de vos boutiques au lieu de payer un loyer, et louez des locaux à d\'autres.' },
+  { name: 'Logistique', icon: 'truck', rank: 4, text: 'Entrepôts et livraisons pour approvisionner plusieurs boutiques à moindre coût.' },
+  { name: 'Bourse', icon: 'trendUp', rank: 5, text: 'Investissez, rachetez des concurrents ou faites entrer votre groupe en bourse.' },
 ]
 
 const dateFmt = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })
@@ -72,6 +77,7 @@ export function Phone({
   onClose,
   onFindLot,
   onRestart,
+  onImport,
 }: {
   state: GameState
   act: Act
@@ -80,6 +86,7 @@ export function Phone({
   onClose: () => void
   onFindLot: () => void
   onRestart: () => void
+  onImport: (s: GameState) => void
 }) {
   const badges = phoneBadges(state)
   const { dragY, closing, close, dragHandlers } = useSwipeToClose(onClose)
@@ -117,7 +124,13 @@ export function Phone({
       content = <InfosView state={state} />
       break
     case 'reglages':
-      content = <SettingsApp onRestart={onRestart} />
+      content = <SettingsApp state={state} onRestart={onRestart} onImport={onImport} />
+      break
+    case 'objectifs':
+      content = <ObjectivesApp state={state} />
+      break
+    case 'avenir':
+      content = <ComingSoon rank={currentRank(state)} />
       break
   }
 
@@ -209,6 +222,28 @@ function useSwipeToClose(onClose: () => void) {
   return { dragY, closing, close, dragHandlers }
 }
 
+function ComingSoon({ rank }: { rank: number }) {
+  return (
+    <>
+      <p className="muted small">Ces applis arrivent dans les prochaines mises à jour. Montez en rang pour être prêt à les utiliser.</p>
+      {LOCKED.map((l) => (
+        <div key={l.name} className="soon-card">
+          <span className="app-tile soon-tile">
+            <Icon name={l.icon} size={24} />
+          </span>
+          <div className="choice-main">
+            <div className="objective-top">
+              <strong>{l.name}</strong>
+              <span className={`small strong ${rank >= l.rank ? 'good' : 'muted'}`}>{rank >= l.rank ? 'Rang atteint' : `Rang ${l.rank}`}</span>
+            </div>
+            <span className="small">{l.text}</span>
+          </div>
+        </div>
+      ))}
+    </>
+  )
+}
+
 function Home({
   state,
   badges,
@@ -228,7 +263,9 @@ function Home({
   const lo = Math.min(...series, 0)
   const hi = Math.max(...series, 1)
   const spark = series.map((v, i) => `${(i / Math.max(1, days - 1)) * 110 + 2},${40 - ((v - lo) / (hi - lo)) * 34}`).join(' ')
-  const notif = state.inbox.find(needsAttention)
+  const notif = state.inbox.find((c) => c.choices.length > 0) ?? state.inbox.find(needsAttention)
+  const rank = currentRank(state)
+  const next = activeObjectives(state).find((o) => !o.done)
 
   return (
     <div className="home">
@@ -250,6 +287,21 @@ function Home({
         )}
       </div>
 
+ {next && (
+        <button className="objective-strip" onClick={() => setRoute({ app: 'objectifs' })}>
+          <span className="objective-strip-icon">
+            <Icon name="trophy" size={18} />
+          </span>
+          <span className="choice-main">
+            <span className="small muted">
+              Rang {rank} · {rankTitle(rank)}
+            </span>
+            <strong className="small">{next.title}</strong>
+            {next.target > 1 && <Meter value={next.current} max={next.target} label={next.title} />}
+          </span>
+        </button>
+      )}
+
       {notif && (
         <button className="notif" onClick={() => setRoute({ app: 'messages', convId: notif.id })}>
           <Avatar kind={notif.kind} size={38} />
@@ -265,17 +317,14 @@ function Home({
         {GRID.map((id) => (
           <AppIcon key={id} app={APPS[id]} badge={badges[id]} onClick={() => setRoute({ app: id })} />
         ))}
-        {LOCKED.map((l) => (
-          <div key={l.name} className="app-icon locked" title="Bientôt disponible">
-            <span className="app-tile">
-              <Icon name={l.icon} size={26} />
-              <span className="lock-badge">
-                <Icon name="lock" size={12} />
-              </span>
-            </span>
-            <span className="app-name">{l.name}</span>
-          </div>
-        ))}
+        <button className="app-icon" onClick={() => setRoute({ app: 'avenir' })}>
+          <span className="app-tile folder">
+            {LOCKED.map((l) => (
+              <Icon key={l.name} name={l.icon} size={15} />
+            ))}
+          </span>
+          <span className="app-name">À venir</span>
+        </button>
       </div>
 
       <div className="dock">
