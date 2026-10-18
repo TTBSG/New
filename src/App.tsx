@@ -105,7 +105,7 @@ export default function App() {
         </button>
       )}
 
-      {toast && (
+      {toast && !phoneOpen && (
         <button
           className="toast"
           onClick={() => {

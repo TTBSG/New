@@ -252,14 +252,20 @@ input[type='range'] { width: 100%; accent-color: var(--accent); }
   border-radius: 32px 32px 0 0; overflow: hidden; display: flex; flex-direction: column;
   background: linear-gradient(165deg, #ffe3c7, #ffd0b0 45%, #f7b9a6); box-shadow: 0 -8px 30px rgb(0 0 0 / 0.25);
   animation: phone-up 0.28s cubic-bezier(0.2, 0.9, 0.3, 1);
+  transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
+.phone.dragging { transition: none; }
+.phone-backdrop { transition: opacity 0.25s ease; }
+.phone-layer.closing .phone { transform: translateY(105%); transition: transform 0.25s cubic-bezier(0.4, 0, 1, 1); }
+.phone-layer.closing .phone-backdrop { opacity: 0; }
 .phone.in-app { background: var(--bg); }
 @keyframes phone-up { from { transform: translateY(100%); } }
-.phone-grab { padding: 9px 0 6px; display: flex; justify-content: center; cursor: pointer; touch-action: none; flex-shrink: 0; }
+.phone-top { flex-shrink: 0; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+.phone-grab { padding: 10px 0 8px; display: flex; justify-content: center; }
 .phone-grab span { width: 48px; height: 5px; border-radius: 3px; background: rgb(59 47 42 / 0.3); }
 
 .home { flex: 1; overflow-y: auto; padding: 0 16px calc(env(safe-area-inset-bottom) + 16px); display: flex; flex-direction: column; }
-.status-line { text-align: center; font-size: 0.8rem; font-weight: 900; text-transform: capitalize; margin-bottom: 10px; }
+.status-line { text-align: center; font-size: 0.8rem; font-weight: 900; text-transform: capitalize; padding-bottom: 12px; }
 .widget {
   background: rgb(255 255 255 / 0.78); border-radius: 22px; padding: 12px 14px;
   display: flex; justify-content: space-between; align-items: center;
@@ -295,6 +301,7 @@ input[type='range'] { width: 100%; accent-color: var(--accent); }
   flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 4px 14px calc(env(safe-area-inset-bottom) + 24px);
   display: flex; flex-direction: column; gap: 12px;
 }
+.app-body > *, .home > * { flex-shrink: 0; }
 .app-body .tabs { margin: 0 -14px; padding: 2px 14px 4px; }
 
 /* ---------- Messages ---------- */

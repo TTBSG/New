@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from 'react'
 import { dateOf } from '../../game/engine'
 import type { GameState } from '../../game/types'
 import { BusinessView } from '../BusinessView'
@@ -82,7 +82,7 @@ export function Phone({
   onRestart: () => void
 }) {
   const badges = phoneBadges(state)
-  const swipe = useRef<number | null>(null)
+  const { dragY, closing, close, dragHandlers } = useSwipeToClose(onClose)
   const app = route.app ? APPS[route.app] : null
   const business = route.businessId ? state.businesses.find((b) => b.id === route.businessId) : undefined
 
@@ -101,7 +101,7 @@ export function Phone({
       content = business ? (
         <BusinessView state={state} business={business} act={act} />
       ) : (
-        <CommercesApp state={state} onOpen={(id) => setRoute({ app: 'commerces', businessId: id })} onFindLot={onFindLot} />
+        <CommercesApp state={state} onOpen={(id) => setRoute({ app: 'commerces', businessId: id })} onFindLot={() => close(onFindLot)} />
       )
       break
     case 'banque':
@@ -122,26 +122,20 @@ export function Phone({
   }
 
   return (
-    <div className="phone-layer">
-      <div className="phone-backdrop" onClick={onClose} />
-      <div className={`phone ${app ? 'in-app' : ''}`} role="dialog" aria-label="Téléphone">
-        <div
-          className="phone-grab"
-          onPointerDown={(e) => (swipe.current = e.clientY)}
-          onPointerUp={(e) => {
-            const start = swipe.current
-            swipe.current = null
-            // Un simple toucher ou un glissement vers le bas ferme le téléphone.
-            if (start === null || e.clientY - start > 40 || Math.abs(e.clientY - start) < 6) onClose()
-          }}
-          aria-label="Fermer le téléphone"
-          role="button"
-        >
-          <span />
-        </div>
-
-        {app ? (
-          <>
+    <div className={`phone-layer ${closing ? 'closing' : ''}`}>
+      <div className="phone-backdrop" onClick={() => close()} style={{ opacity: dragY ? Math.max(0, 1 - dragY / 400) : undefined }} />
+      <div
+        className={`phone ${app ? 'in-app' : ''} ${dragY ? 'dragging' : ''}`}
+        style={dragY ? { transform: `translateY(${dragY}px)` } : undefined}
+        role="dialog"
+        aria-label="Téléphone"
+      >
+        {/* Toute la barre du haut sert de poignée : on peut faire glisser le téléphone vers le bas pour le fermer. */}
+        <div className="phone-top" {...dragHandlers}>
+          <div className="phone-grab" aria-hidden="true">
+            <span />
+          </div>
+          {app ? (
             <div className="app-bar">
               <button className="app-back" onClick={back} aria-label="Retour">
                 <Icon name="back" size={22} />
@@ -151,14 +145,68 @@ export function Phone({
               </span>
               <strong>{app.name}</strong>
             </div>
-            <div className="app-body">{content}</div>
-          </>
-        ) : (
-          <Home state={state} badges={badges} setRoute={setRoute} onMap={onClose} />
-        )}
+          ) : (
+            <div className="status-line">{dateFmt.format(dateOf(state.day))}</div>
+          )}
+        </div>
+
+        {app ? <div className="app-body">{content}</div> : <Home state={state} badges={badges} setRoute={setRoute} onMap={() => close()} />}
       </div>
     </div>
   )
+}
+
+/** Glisser la barre du haut vers le bas ferme le téléphone ; il suit le doigt et revient en place si le geste est trop court. */
+function useSwipeToClose(onClose: () => void) {
+  const [dragY, setDragY] = useState(0)
+  const [closing, setClosing] = useState(false)
+  const start = useRef<{ y: number; t: number; id: number; captured: boolean } | null>(null)
+  const after = useRef<() => void>(onClose)
+
+  const close = (then: () => void = onClose) => {
+    after.current = then
+    setDragY(0)
+    setClosing(true)
+  }
+
+  // La fermeture attend la fin de l'animation de descente.
+  useEffect(() => {
+    if (!closing) return
+    const id = setTimeout(() => after.current(), 260)
+    return () => clearTimeout(id)
+  }, [closing])
+
+  const dragHandlers = {
+    onPointerDown: (e: RPointerEvent) => {
+      start.current = { y: e.clientY, t: e.timeStamp, id: e.pointerId, captured: false }
+    },
+    onPointerMove: (e: RPointerEvent) => {
+      const s = start.current
+      if (!s || s.id !== e.pointerId) return
+      const dy = e.clientY - s.y
+      // On ne capture le doigt qu'une fois le glissement engagé, pour que les boutons restent cliquables.
+      if (!s.captured && dy > 8) {
+        s.captured = true
+        ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
+      }
+      if (s.captured) setDragY(Math.max(0, dy))
+    },
+    onPointerUp: (e: RPointerEvent) => {
+      const s = start.current
+      start.current = null
+      if (!s || !s.captured) return
+      const dy = e.clientY - s.y
+      const speed = dy / Math.max(1, e.timeStamp - s.t)
+      if (dy > 120 || (dy > 40 && speed > 0.5)) close()
+      else setDragY(0)
+    },
+    onPointerCancel: () => {
+      start.current = null
+      setDragY(0)
+    },
+  }
+
+  return { dragY, closing, close, dragHandlers }
 }
 
 function Home({
@@ -184,7 +232,6 @@ function Home({
 
   return (
     <div className="home">
-      <div className="status-line">{dateFmt.format(dateOf(state.day))}</div>
 
       <div className="widget">
         <div>
