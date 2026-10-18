@@ -1,5 +1,6 @@
 import { getParcel, parcelRent } from './city'
 import { getSector } from './sectors'
+import { addBatch } from './stock'
 import type { Business, Choice, Conversation, ConversationKind, Employee, GameState } from './types'
 import { clamp, log, newId, pick, rand, randRange, update } from './util'
 
@@ -63,6 +64,10 @@ export function welcomeMessage(s: GameState) {
     'Une fois votre commerce ouvert, gérez-le depuis l\'appli Commerces de ce téléphone. Et surtout : recrutez quelqu\'un, sinon personne ne servira les clients !',
   ])
   s.flags.welcome = true
+}
+
+export function supplierMessage(s: GameState, contact: string, role: string, lines: string[]) {
+  send(s, 'supplier', { contact, role }, lines)
 }
 
 export function advisorMessage(s: GameState, lines: string[]) {
@@ -139,7 +144,10 @@ function maybeRaiseRequest(s: GameState, b: Business) {
 function maybeSupplierDeal(s: GameState) {
   if (!s.businesses.length || rand(s) > 1 / 20) return
   const b = pick(s, s.businesses)
-  const p = pick(s, b.products)
+  // Pas de promotion sur les produits très frais : ils périmeraient avant d'être vendus.
+  const keepable = b.products.filter((x) => (getSector(b.sectorId).products.find((d) => d.id === x.id)!.shelfLife ?? 99) >= 3)
+  if (!keepable.length) return
+  const p = pick(s, keepable)
   const def = getSector(b.sectorId).products.find((x) => x.id === p.id)!
   const discount = Math.round(randRange(s, 0.2, 0.35) * 100) / 100
   const quantity = Math.max(10, Math.round(p.restockTarget * randRange(s, 2, 4)))
@@ -276,7 +284,7 @@ function applyChoice(s: GameState, c: Conversation, choiceId: string): string | 
       if (s.cash < c.amount!) return 'Votre trésorerie ne permet pas ce paiement.'
       const p = b!.products.find((x) => x.id === c.productId)!
       s.cash -= c.amount!
-      p.stock += c.quantity!
+      addBatch(b!.sectorId, p, c.quantity!, s.day)
       log(s, `Achat groupé pour ${b!.name} : ${c.quantity} unités pour ${eur(c.amount!)}.`)
       return 'Parfait, la livraison arrive aujourd\'hui !'
     }

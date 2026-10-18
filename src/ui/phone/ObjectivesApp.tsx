@@ -51,9 +51,17 @@ export function ObjectivesApp({ state }: { state: GameState }) {
               </div>
             ))}
           </Section>
-          {reward && (reward.prime > 0 || reward.unlockSectors.length > 0) && (
+          {reward && (reward.prime > 0 || reward.unlockSectors.length > 0 || reward.unlockApps.length > 0) && (
             <Section title={`Récompense du rang « ${rankTitle(rank + 1)} »`}>
               {reward.prime > 0 && <p className="small">Prime de {eur(reward.prime)}</p>}
+              {reward.unlockApps.map((name) => (
+                <p key={name} className="small">
+                  <span className="inline-icon accent">
+                    <Icon name="phone" size={16} />
+                  </span>{' '}
+                  Nouvelle appli : <strong>{name}</strong>
+                </p>
+              ))}
               {reward.unlockSectors.map((id) => (
                 <p key={id} className="small">
                   <span className="inline-icon" style={{ color: getSector(id).color }}>

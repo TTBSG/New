@@ -12,17 +12,18 @@ import {
   setPrice,
   setRestockTarget,
   setSalary,
-  setSupplier,
   severance,
   stockValue,
   unitCost,
 } from '../game/engine'
+import { expiringToday, productDef, stockOf } from '../game/stock'
+import { autoTarget, getSupplier, pendingOrders, sectorSuppliers, setAuto, setProductSupplier, suppliersUnlocked, SUPPLIERS_RANK } from '../game/supply'
 import { getParcel } from '../game/city'
 import { diagnose } from '../game/diagnose'
-import { SUPPLIERS, getSector } from '../game/sectors'
-import type { Business, GameState, SupplierTier } from '../game/types'
+import { getSector } from '../game/sectors'
+import type { Business, GameState, ProductState } from '../game/types'
 import { BarChart, Meter, NumberField, Section, Stat } from './common'
-import { eur, eurCents, num, signed } from './format'
+import { TIER_LABEL, dayLabel, eur, eurCents, num, signed } from './format'
 import { Icon, type IconName } from './icons'
 import type { Act } from './useGame'
 
@@ -58,7 +59,7 @@ export function BusinessView({ state, business: b, act, onBack }: { state: GameS
         ))}
       </div>
       {tab === 'Aperçu' && <Overview state={state} b={b} act={act} onBack={onBack} />}
-      {tab === 'Produits' && <Products b={b} act={act} />}
+      {tab === 'Produits' && <Products state={state} b={b} act={act} />}
       {tab === 'Équipe' && <Team state={state} b={b} act={act} />}
       {tab === 'Marketing' && <Marketing b={b} act={act} />}
       {tab === 'Finances' && <Finances b={b} />}
@@ -122,51 +123,121 @@ function Overview({ state, b, act, onBack }: { state: GameState; b: Business; ac
   )
 }
 
-function Products({ b, act }: { b: Business; act: Act }) {
-  const sector = getSector(b.sectorId)
+function Products({ state, b, act }: { state: GameState; b: Business; act: Act }) {
+  const pending = pendingOrders(state, b.id)
   return (
     <>
       <p className="muted small">
-        Stock total : {eur(stockValue(b))}. Le stock est réapprovisionné chaque soir jusqu'au stock cible, si la trésorerie le permet.
+        Valeur du stock : {eur(stockValue(b))} · {pending.length ? `${pending.length} commande${pending.length > 1 ? 's' : ''} en cours` : 'aucune commande en cours'}.
+        {suppliersUnlocked(state) ? " Les commandes manuelles se passent dans l'appli Fournisseurs." : ''}
       </p>
-      {b.products.map((p) => {
-        const def = sector.products.find((x) => x.id === p.id)!
-        const cost = unitCost(b.sectorId, p)
-        const margin = p.price > 0 ? ((p.price - cost) / p.price) * 100 : 0
-        const fair = perceivedPrice(b.sectorId, p)
-        const ratio = p.price / fair
-        return (
-          <Section key={p.id} title={def.name} right={<span className={p.stock === 0 ? 'bad small' : 'muted small'}>stock {num(p.stock)}</span>}>
-            <div className="field">
-              <label>Prix de vente</label>
-              <NumberField value={p.price} decimals={2} step={def.refPrice >= 50 ? 5 : 0.1} min={0.01} suffix="€" onChange={(v) => act(setPrice, b.id, p.id, v)} />
-            </div>
-            <p className="small muted">
-              Prix jugé juste : {eurCents(fair)} ·{' '}
-              <span className={ratio > 1.15 ? 'bad' : ratio < 0.9 ? 'warn' : 'good'}>
-                {ratio > 1.15 ? 'trop cher' : ratio < 0.9 ? 'bradé' : 'bien placé'}
-              </span>{' '}
-              · coût {eurCents(cost)} · marge {Math.round(margin)} %
-            </p>
-            <div className="field">
-              <label>Fournisseur</label>
-              <div className="segmented">
-                {(Object.keys(SUPPLIERS) as SupplierTier[]).map((t) => (
-                  <button key={t} className={p.supplier === t ? 'active' : ''} onClick={() => act(setSupplier, b.id, p.id, t)}>
-                    {SUPPLIERS[t].name}
-                    <span className="small muted">qualité {SUPPLIERS[t].quality}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="field">
-              <label>Stock cible</label>
-              <NumberField value={p.restockTarget} step={Math.max(1, Math.round(p.restockTarget / 10))} onChange={(v) => act(setRestockTarget, b.id, p.id, v)} />
-            </div>
-          </Section>
-        )
-      })}
+      {b.products.map((p) => (
+        <ProductCard key={p.id} state={state} b={b} p={p} act={act} />
+      ))}
     </>
+  )
+}
+
+function ProductCard({ state, b, p, act }: { state: GameState; b: Business; p: ProductState; act: Act }) {
+  const [choosing, setChoosing] = useState(false)
+  const def = productDef(b.sectorId, p.id)
+  const supplier = getSupplier(state, p.supplierId)
+  const cost = unitCost(state, b.sectorId, p)
+  const margin = p.price > 0 ? ((p.price - cost) / p.price) * 100 : 0
+  const fair = perceivedPrice(state, b.sectorId, p)
+  const ratio = p.price / fair
+  const stock = stockOf(p)
+  const expiring = expiringToday(p, state.day)
+  const deliveries = pendingOrders(state, b.id)
+    .map((o) => ({ order: o, qty: o.lines.filter((l) => l.productId === p.id).reduce((a, l) => a + l.qty, 0) }))
+    .filter((d) => d.qty > 0)
+    .sort((x, y) => x.order.dueDay - y.order.dueDay)
+  const smart = autoTarget(b, p)
+  const unlocked = suppliersUnlocked(state)
+
+  return (
+    <Section title={def.name} right={<span className={stock === 0 ? 'bad small strong' : 'muted small'}>{num(stock)} en rayon</span>}>
+      <div className="field">
+        <label>Prix de vente</label>
+        <NumberField value={p.price} decimals={2} step={def.refPrice >= 50 ? 5 : 0.1} min={0.01} suffix="€" onChange={(v) => act(setPrice, b.id, p.id, v)} />
+      </div>
+      <p className="small muted">
+        Prix jugé juste : {eurCents(fair)} ·{' '}
+        <span className={ratio > 1.15 ? 'bad' : ratio < 0.9 ? 'warn' : 'good'}>{ratio > 1.15 ? 'trop cher' : ratio < 0.9 ? 'bradé' : 'bien placé'}</span> · coût{' '}
+        {eurCents(cost)} · marge {Math.round(margin)} %
+      </p>
+
+      <div className="stock-line">
+        <span>
+          <Icon name="box" size={14} /> {def.shelfLife ? `Se garde ${def.shelfLife} jour${def.shelfLife > 1 ? 's' : ''}` : 'Ne périme pas'}
+        </span>
+        {expiring > 0 && <span className="warn">{num(expiring)} à vendre avant ce soir</span>}
+        {deliveries.slice(0, 3).map(({ order, qty }) => (
+          <span key={order.id} className={order.delayed ? 'bad' : 'good'}>
+            +{num(qty)} {order.delayed ? 'en retard, ' : ''}le {dayLabel(order.dueDay)}
+          </span>
+        ))}
+      </div>
+
+      <div className="field">
+        <label>Fournisseur</label>
+        <button className="supplier-row" onClick={() => unlocked && setChoosing(!choosing)}>
+          <span className="choice-main">
+            <strong>{supplier.name}</strong>
+            <span className="small muted">
+              {TIER_LABEL[supplier.tier]} · qualité {supplier.quality} · livre en {supplier.leadDays} j
+            </span>
+          </span>
+          {unlocked ? <span className="small strong accent">{choosing ? 'Fermer' : 'Changer'}</span> : <span className="small muted lock-note"><Icon name="lock" size={13} /> Rang {SUPPLIERS_RANK}</span>}
+        </button>
+        {choosing && (
+          <div className="supplier-choices">
+            {sectorSuppliers(state, b.sectorId).map((x) => (
+              <button
+                key={x.id}
+                className={`supplier-option ${x.id === p.supplierId ? 'active' : ''}`}
+                onClick={() => {
+                  act(setProductSupplier, b.id, p.id, x.id)
+                  setChoosing(false)
+                }}
+              >
+                <strong>{x.name}</strong>
+                <span className="small muted">
+                  {TIER_LABEL[x.tier]} · qualité {x.quality} · {x.priceMult >= 1 ? '+' : '−'}
+                  {Math.abs(Math.round((x.priceMult - 1) * 100))} % · {x.leadDays} j · fiable à {Math.round(x.reliability * 100)} %
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="field">
+        <label>Réapprovisionnement</label>
+        <div className="segmented two">
+          <button className={p.auto ? 'active' : ''} onClick={() => act(setAuto, b.id, p.id, true)}>
+            Automatique
+          </button>
+          <button className={!p.auto ? 'active' : ''} disabled={!unlocked} onClick={() => act(setAuto, b.id, p.id, false)}>
+            Manuel{!unlocked && <span className="small muted">rang {SUPPLIERS_RANK}</span>}
+          </button>
+        </div>
+      </div>
+      {p.auto ? (
+        <>
+          <div className="field">
+            <label>Stock cible</label>
+            <NumberField value={p.restockTarget} step={Math.max(1, Math.round(p.restockTarget / 10))} onChange={(v) => act(setRestockTarget, b.id, p.id, v)} />
+          </div>
+          <p className="small muted">
+            {def.shelfLife && def.shelfLife <= 2 ? 'Complété chaque soir' : 'Recommandé quand le stock passe sous 70 % de la cible'}
+            {def.shelfLife && smart < p.restockTarget ? `, limité à ${num(smart)} d'après vos ventes récentes pour éviter le gaspillage.` : '.'}
+          </p>
+        </>
+      ) : (
+        <p className="small muted">Aucune commande automatique : pensez à commander dans l'appli Fournisseurs.</p>
+      )}
+    </Section>
   )
 }
 
@@ -258,11 +329,12 @@ function Marketing({ b, act }: { b: Business; act: Act }) {
 
 function Finances({ b }: { b: Business }) {
   const recent = b.history.slice(-30)
-  const sum = (k: 'revenue' | 'grossMargin' | 'wages' | 'rent' | 'marketing' | 'profit' | 'purchases') => recent.reduce((a, r) => a + r[k], 0)
+  const sum = (k: 'revenue' | 'grossMargin' | 'wages' | 'rent' | 'marketing' | 'profit' | 'purchases' | 'waste') => recent.reduce((a, r) => a + (r[k] ?? 0), 0)
   const revenue = sum('revenue')
   const rows: [string, number][] = [
     ["Chiffre d'affaires", revenue],
     ['Coût des marchandises vendues', -(revenue - sum('grossMargin'))],
+    ['Produits périmés jetés', -sum('waste')],
     ['Salaires', -sum('wages')],
     ['Loyer', -sum('rent')],
     ['Marketing', -sum('marketing')],

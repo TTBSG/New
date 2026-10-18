@@ -67,7 +67,8 @@ export function TutorialCard({ step, onAction, onSkip }: { step: TutorialStep; o
 // ---------- Célébrations ----------
 
 export function RankUpModal({ c, onClose }: { c: Celebration; onClose: () => void }) {
-  const unlocked = RANKS.find((r) => r.rank === (c.rankUp ?? 0) - 1)?.unlockSectors ?? []
+  const reward = RANKS.find((r) => r.rank === (c.rankUp ?? 0) - 1)
+  const unlocked = reward?.unlockSectors ?? []
   return (
     <div className="celebrate-backdrop" onClick={onClose}>
       <div className="celebrate" onClick={(e) => e.stopPropagation()}>
@@ -88,6 +89,14 @@ export function RankUpModal({ c, onClose }: { c: Celebration; onClose: () => voi
               <Icon name={id as IconName} size={16} />
             </span>{' '}
             Nouveau secteur disponible : <strong>{getSector(id).name}</strong>
+          </p>
+        ))}
+        {reward?.unlockApps.map((name) => (
+          <p key={name} className="small">
+            <span className="inline-icon accent">
+              <Icon name="phone" size={16} />
+            </span>{' '}
+            Nouvelle appli : <strong>{name}</strong>
           </p>
         ))}
         <button className="btn primary block" onClick={onClose}>

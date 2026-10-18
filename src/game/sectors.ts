@@ -1,4 +1,4 @@
-import type { DistrictDef, SectorDef, SupplierTier } from './types'
+import type { DistrictDef, SectorDef } from './types'
 
 const manager = { id: 'manager', name: 'Manager', baseSalary: 3200, capacity: 0 }
 
@@ -14,8 +14,8 @@ export const SECTORS: SectorDef[] = [
     products: [
       { id: 'espresso', name: 'Espresso', unitCost: 0.35, refPrice: 2, baseShare: 0.32 },
       { id: 'cappuccino', name: 'Cappuccino', unitCost: 0.7, refPrice: 3.8, baseShare: 0.22 },
-      { id: 'croissant', name: 'Croissant', unitCost: 0.45, refPrice: 1.6, baseShare: 0.18 },
-      { id: 'sandwich', name: 'Sandwich', unitCost: 2.1, refPrice: 6.5, baseShare: 0.09 },
+      { id: 'croissant', name: 'Croissant', unitCost: 0.45, refPrice: 1.6, baseShare: 0.18, shelfLife: 1 },
+      { id: 'sandwich', name: 'Sandwich', unitCost: 2.1, refPrice: 6.5, baseShare: 0.09, shelfLife: 1 },
     ],
     roles: [{ id: 'barista', name: 'Barista', baseSalary: 1900, capacity: 130 }, manager],
   },
@@ -28,10 +28,10 @@ export const SECTORS: SectorDef[] = [
     trafficMult: 1.1,
     priceElasticity: 1.3,
     products: [
-      { id: 'baguette', name: 'Baguette', unitCost: 0.3, refPrice: 1.2, baseShare: 0.45 },
-      { id: 'viennoiserie', name: 'Viennoiserie', unitCost: 0.4, refPrice: 1.4, baseShare: 0.25 },
-      { id: 'patisserie', name: 'Pâtisserie', unitCost: 1.3, refPrice: 4.2, baseShare: 0.1 },
-      { id: 'gateau', name: 'Gâteau entier', unitCost: 7, refPrice: 22, baseShare: 0.015 },
+      { id: 'baguette', name: 'Baguette', unitCost: 0.3, refPrice: 1.2, baseShare: 0.45, shelfLife: 1 },
+      { id: 'viennoiserie', name: 'Viennoiserie', unitCost: 0.4, refPrice: 1.4, baseShare: 0.25, shelfLife: 1 },
+      { id: 'patisserie', name: 'Pâtisserie', unitCost: 1.3, refPrice: 4.2, baseShare: 0.1, shelfLife: 2 },
+      { id: 'gateau', name: 'Gâteau entier', unitCost: 7, refPrice: 22, baseShare: 0.015, shelfLife: 3 },
     ],
     roles: [{ id: 'vendeur', name: 'Boulanger-vendeur', baseSalary: 2000, capacity: 160 }, manager],
   },
@@ -44,9 +44,9 @@ export const SECTORS: SectorDef[] = [
     trafficMult: 0.55,
     priceElasticity: 1.2,
     products: [
-      { id: 'menu', name: 'Menu du jour', unitCost: 5.5, refPrice: 16, baseShare: 0.119 },
-      { id: 'carte', name: 'Plat à la carte', unitCost: 8, refPrice: 22, baseShare: 0.068 },
-      { id: 'dessert', name: 'Dessert', unitCost: 1.8, refPrice: 7, baseShare: 0.0765 },
+      { id: 'menu', name: 'Menu du jour', unitCost: 5.5, refPrice: 16, baseShare: 0.119, shelfLife: 2 },
+      { id: 'carte', name: 'Plat à la carte', unitCost: 8, refPrice: 22, baseShare: 0.068, shelfLife: 3 },
+      { id: 'dessert', name: 'Dessert', unitCost: 1.8, refPrice: 7, baseShare: 0.0765, shelfLife: 2 },
       { id: 'vin', name: 'Verre de vin', unitCost: 1.5, refPrice: 6, baseShare: 0.085 },
     ],
     roles: [{ id: 'serveur', name: 'Serveur / Cuisinier', baseSalary: 2100, capacity: 45 }, manager],
@@ -93,7 +93,7 @@ export const SECTORS: SectorDef[] = [
     priceElasticity: 1.4,
     products: [
       { id: 'epicerie', name: 'Épicerie', unitCost: 1.4, refPrice: 2.3, baseShare: 0.5 },
-      { id: 'frais', name: 'Produits frais', unitCost: 2.2, refPrice: 3.9, baseShare: 0.3 },
+      { id: 'frais', name: 'Produits frais', unitCost: 2.2, refPrice: 3.9, baseShare: 0.3, shelfLife: 4 },
       { id: 'boissons', name: 'Boissons', unitCost: 0.9, refPrice: 1.8, baseShare: 0.35 },
       { id: 'hygiene', name: 'Hygiène', unitCost: 2.5, refPrice: 4.5, baseShare: 0.12 },
     ],
@@ -108,10 +108,14 @@ export const DISTRICTS: DistrictDef[] = [
   { id: 'affaires', name: 'Quartier d\'affaires', rentMonthly: 5200, traffic: 700 },
 ]
 
-export const SUPPLIERS: Record<SupplierTier, { name: string; costMult: number; quality: number }> = {
-  eco: { name: 'Économique', costMult: 0.75, quality: 40 },
-  standard: { name: 'Standard', costMult: 1, quality: 60 },
-  premium: { name: 'Premium', costMult: 1.45, quality: 85 },
+/** Fournisseurs spécialisés de chaque secteur (en plus du « Grossiste du Coin », disponible partout). */
+export const SUPPLIER_NAMES: Record<string, { premium: string; eco: string; bulk: string }> = {
+  cafe: { premium: 'Torréfaction Lambert', eco: 'Café Express Discount', bulk: 'Dépôt Central Boissons' },
+  boulangerie: { premium: 'Moulin des Prés', eco: 'Farines Éco', bulk: 'Minoterie Industrielle' },
+  restaurant: { premium: 'Primeurs du Terroir', eco: 'Resto Discount', bulk: 'Grossiste Alimentaire Sud' },
+  vetements: { premium: 'Atelier Belle Maille', eco: 'Textile Import Express', bulk: 'Centrale Mode' },
+  electronique: { premium: 'TechPremium Distribution', eco: 'ÉlectroDiscount', bulk: 'Centrale High-Tech' },
+  superette: { premium: 'Saveurs Fermières', eco: 'Low Cost Distri', bulk: "Centrale d'Achat Régionale" },
 }
 
 export function getSector(id: string): SectorDef {

@@ -9,10 +9,12 @@ import type { Act } from '../useGame'
 import { CommercesApp, ComptaApp, RecrutApp, SettingsApp, businessAlerts } from './apps'
 import { Avatar, MessagesApp, needsAttention } from './MessagesApp'
 import { ObjectivesApp } from './ObjectivesApp'
+import { SuppliersApp } from './SuppliersApp'
+import { SUPPLIERS_RANK } from '../../game/supply'
 import { activeObjectives, currentRank, rankTitle } from '../../game/objectives'
 import { Meter } from '../common'
 
-export type AppId = 'messages' | 'commerces' | 'banque' | 'compta' | 'recrut' | 'actus' | 'reglages' | 'objectifs' | 'avenir'
+export type AppId = 'messages' | 'commerces' | 'banque' | 'compta' | 'recrut' | 'actus' | 'reglages' | 'objectifs' | 'avenir' | 'fournisseurs'
 
 export interface PhoneRoute {
   app: AppId | null
@@ -25,6 +27,8 @@ interface AppDef {
   name: string
   icon: IconName
   color: string
+  /** Rang nécessaire pour utiliser l'appli. */
+  minRank?: number
 }
 
 const APPS: Record<AppId, AppDef> = {
@@ -37,12 +41,12 @@ const APPS: Record<AppId, AppDef> = {
   reglages: { id: 'reglages', name: 'Réglages', icon: 'gear', color: '#8a8f99' },
   objectifs: { id: 'objectifs', name: 'Objectifs', icon: 'trophy', color: '#e0a21b' },
   avenir: { id: 'avenir', name: 'À venir', icon: 'lock', color: '#b08f80' },
+  fournisseurs: { id: 'fournisseurs', name: 'Fournisseurs', icon: 'box', color: '#5c8de8', minRank: SUPPLIERS_RANK },
 }
-const GRID: AppId[] = ['objectifs', 'compta', 'recrut', 'actus', 'reglages']
+const GRID: AppId[] = ['objectifs', 'fournisseurs', 'compta', 'recrut', 'actus', 'reglages']
 const DOCK: AppId[] = ['messages', 'commerces', 'banque']
 /** Applis des prochaines mises à jour, affichées verrouillées pour montrer la progression. */
 const LOCKED: { name: string; icon: IconName; rank: number; text: string }[] = [
-  { name: 'Fournisseurs', icon: 'box', rank: 3, text: 'Comparez les fournisseurs, négociez les prix, gérez les délais de livraison et les produits frais qui périment.' },
   { name: 'Immo', icon: 'key', rank: 4, text: 'Achetez les murs de vos boutiques au lieu de payer un loyer, et louez des locaux à d\'autres.' },
   { name: 'Logistique', icon: 'truck', rank: 4, text: 'Entrepôts et livraisons pour approvisionner plusieurs boutiques à moindre coût.' },
   { name: 'Bourse', icon: 'trendUp', rank: 5, text: 'Investissez, rachetez des concurrents ou faites entrer votre groupe en bourse.' },
@@ -54,14 +58,20 @@ export function phoneBadges(state: GameState): Partial<Record<AppId, number>> {
   return {
     messages: state.inbox.filter(needsAttention).length,
     commerces: state.businesses.filter((b) => businessAlerts(b).length > 0).length,
+    fournisseurs: state.orders.filter((o) => o.delayed).length,
   }
 }
 
-function AppIcon({ app, badge, onClick }: { app: AppDef; badge?: number; onClick: () => void }) {
+function AppIcon({ app, badge, locked, onClick }: { app: AppDef; badge?: number; locked?: boolean; onClick: () => void }) {
   return (
-    <button className="app-icon" onClick={onClick}>
-      <span className="app-tile" style={{ background: app.color }}>
+    <button className={`app-icon ${locked ? 'locked' : ''}`} onClick={onClick}>
+      <span className="app-tile" style={locked ? undefined : { background: app.color }}>
         <Icon name={app.icon} size={28} />
+        {locked && (
+          <span className="lock-badge">
+            <Icon name="lock" size={12} />
+          </span>
+        )}
       </span>
       {!!badge && <span className="badge">{badge}</span>}
       <span className="app-name">{app.name}</span>
@@ -129,10 +139,27 @@ export function Phone({
     case 'objectifs':
       content = <ObjectivesApp state={state} />
       break
+    case 'fournisseurs':
+      content = <SuppliersApp state={state} act={act} />
+      break
     case 'avenir':
       content = <ComingSoon rank={currentRank(state)} />
       break
   }
+
+  if (app?.minRank && currentRank(state) < app.minRank)
+    content = (
+      <div className="locked-app">
+        <span className="app-tile" style={{ background: app.color }}>
+          <Icon name={app.icon} size={30} />
+        </span>
+        <strong>{app.name} se débloque au rang {app.minRank}</strong>
+        <p className="small muted">Remplissez vos objectifs dans l'appli Objectifs pour y accéder.</p>
+        <button className="btn primary" onClick={() => setRoute({ app: 'objectifs' })}>
+          Voir mes objectifs
+        </button>
+      </div>
+    )
 
   return (
     <div className={`phone-layer ${closing ? 'closing' : ''}`}>
@@ -145,9 +172,9 @@ export function Phone({
       >
         {/* Toute la barre du haut sert de poignée : on peut faire glisser le téléphone vers le bas pour le fermer. */}
         <div className="phone-top" {...dragHandlers}>
-          <div className="phone-grab" aria-hidden="true">
+          <button className="phone-grab" onClick={() => close()} aria-label="Fermer le téléphone">
             <span />
-          </div>
+          </button>
           {app ? (
             <div className="app-bar">
               <button className="app-back" onClick={back} aria-label="Retour">
@@ -315,7 +342,7 @@ function Home({
 
       <div className="app-grid">
         {GRID.map((id) => (
-          <AppIcon key={id} app={APPS[id]} badge={badges[id]} onClick={() => setRoute({ app: id })} />
+          <AppIcon key={id} app={APPS[id]} badge={badges[id]} locked={!!APPS[id].minRank && rank < APPS[id].minRank!} onClick={() => setRoute({ app: id })} />
         ))}
         <button className="app-icon" onClick={() => setRoute({ app: 'avenir' })}>
           <span className="app-tile folder">

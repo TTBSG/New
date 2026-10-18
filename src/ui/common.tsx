@@ -52,7 +52,7 @@ export function NumberField({
   // Affichage à la française : virgule décimale.
   const show = (v: number) => v.toFixed(decimals).replace('.', ',')
   const [text, setText] = useState(show(value))
-  useEffect(() => setText(show(value)), [value, decimals])
+  useEffect(() => setText(value.toFixed(decimals).replace('.', ',')), [value, decimals])
   const commit = (v: number) => {
     const clean = Math.max(min, Number.isFinite(v) ? v : value)
     onChange(Number(clean.toFixed(decimals)))

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { isVacant } from './city'
 import { borrow, hire, migrate, newGame, openBusiness, tick } from './engine'
 import { answer } from './messages'
+import { stockOf } from './stock'
 import type { GameState } from './types'
 
 function cafe(seed = 9): GameState {
@@ -49,7 +50,7 @@ describe('messages', () => {
   it('une offre fournisseur acceptée ajoute du stock contre de l\'argent', () => {
     let s = runUntil(cafe(4), 'supplier')
     const c = s.inbox.find((x) => x.kind === 'supplier' && x.choices.length)!
-    const p = () => s.businesses[0].products.find((x) => x.id === c.productId)!.stock
+    const p = () => stockOf(s.businesses[0].products.find((x) => x.id === c.productId)!)
     const stock = p()
     const cash = s.cash
     s = answer(s, c.id, 'accept')
@@ -64,16 +65,29 @@ describe('messages', () => {
     expect(s.inbox.find((x) => x.id === id)!.choices).toHaveLength(0)
   })
 
-  it('convertit une sauvegarde de la version 2', () => {
-    const s = cafe() as unknown as Record<string, unknown>
-    const old = structuredClone({ ...s, version: 2 }) as Record<string, unknown>
-    delete old.inbox
-    delete old.flags
+  it('convertit une sauvegarde de la version 2 en conservant le stock', () => {
+    const s = cafe()
+    const stockBefore = s.businesses[0].products.map(stockOf)
+    // Reconstitue le format de l'époque : stock simple, gamme de fournisseur, pas de messagerie ni de fournisseurs.
+    const old = structuredClone(s) as unknown as Record<string, unknown> & { businesses: { products: Record<string, unknown>[] }[] }
+    old.version = 2
+    for (const k of ['inbox', 'flags', 'suppliers', 'orders', 'orderHistory', 'stats', 'objectivesDone', 'unlockedSectors', 'celebrations']) delete old[k]
+    for (const b of old.businesses)
+      for (const p of b.products) {
+        p.stock = stockOf(p as never)
+        p.supplier = 'premium'
+        delete p.batches
+        delete p.supplierId
+        delete p.auto
+      }
     const migrated = migrate(old as unknown as GameState)!
-    expect(migrated.version).toBe(4)
+    expect(migrated.version).toBe(5)
+    expect(migrated.inbox).toHaveLength(2)
     expect(migrated.objectivesDone).toContain('open_first')
-    expect(migrated.inbox).toHaveLength(1)
     expect(migrated.businesses[0].rentMult).toBe(1)
+    expect(migrated.businesses[0].products.map(stockOf)).toEqual(stockBefore)
+    const sup = migrated.suppliers.find((x) => x.id === migrated.businesses[0].products[0].supplierId)!
+    expect(sup.tier).toBe('premium')
     expect(() => tick(migrated)).not.toThrow()
   })
 })

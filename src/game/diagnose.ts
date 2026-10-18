@@ -1,5 +1,7 @@
 import { getParcel, parcelRent } from './city'
 import { monthlyWages, perceivedPrice, serviceCapacity } from './engine'
+import { stockOf } from './stock'
+import { getSupplier, pendingOrders } from './supply'
 import { getSector } from './sectors'
 import type { Business, GameState } from './types'
 
@@ -27,15 +29,28 @@ export function diagnose(s: GameState, b: Business): Insight[] {
   if (last.lostToCapacity > last.demand * 0.05)
     out.push({ tone: 'bad', text: `${Math.round(last.lostToCapacity)} ventes perdues hier faute de personnel (capacité ${Math.round(capacity)}/j pour une demande de ${last.demand}). Embauchez ou motivez l'équipe.` })
 
-  const empty = b.products.filter((p) => p.stock === 0).map((p) => sector.products.find((x) => x.id === p.id)!.name)
+  const empty = b.products.filter((p) => stockOf(p) === 0).map((p) => sector.products.find((x) => x.id === p.id)!.name)
   if (last.lostToStockout > last.demand * 0.05)
     out.push({ tone: 'bad', text: `Ruptures de stock${empty.length ? ` (${empty.join(', ')})` : ''} : augmentez le stock cible dans Produits.` })
 
   for (const p of b.products) {
     const def = sector.products.find((x) => x.id === p.id)!
-    const ratio = p.price / perceivedPrice(b.sectorId, p)
-    if (ratio > 1.2) out.push({ tone: 'warn', text: `« ${def.name} » est jugé trop cher (${eur(p.price)} pour ~${eur(perceivedPrice(b.sectorId, p))} attendus) : les clients l'évitent et la réputation baisse.` })
+    const ratio = p.price / perceivedPrice(s, b.sectorId, p)
+    if (ratio > 1.2) out.push({ tone: 'warn', text: `« ${def.name} » est jugé trop cher (${eur(p.price)} pour ~${eur(perceivedPrice(s, b.sectorId, p))} attendus) : les clients l'évitent et la réputation baisse.` })
     else if (ratio < 0.8) out.push({ tone: 'warn', text: `Vous bradez « ${def.name} » : vous pourriez le vendre plus cher sans perdre beaucoup de clients.` })
+  }
+
+  const late = pendingOrders(s, b.id).filter((o) => o.delayed)
+  if (late.length) out.push({ tone: 'warn', text: `Livraison en retard chez ${late.map((o) => getSupplier(s, o.supplierId).name).join(', ')} : attention aux ruptures.` })
+
+  const week7 = b.history.slice(-7)
+  const wasted = week7.reduce((a, r) => a + (r.waste ?? 0), 0)
+  const revenue7 = week7.reduce((a, r) => a + r.revenue, 0)
+  if (revenue7 > 0 && wasted > revenue7 * 0.03) {
+    const units: Record<string, number> = {}
+    for (const r of week7) for (const [id, n] of Object.entries(r.wasteByProduct ?? {})) units[id] = (units[id] ?? 0) + n
+    const worst = Object.entries(units).sort((x, y) => y[1] - x[1]).slice(0, 2).map(([id, n]) => `${n} ${sector.products.find((d) => d.id === id)!.name.toLowerCase()}`)
+    out.push({ tone: 'warn', text: `${eur(wasted)} de produits périmés jetés cette semaine (${worst.join(', ')}) : baissez le stock cible des produits frais.` })
   }
 
   const tired = b.employees.filter((e) => e.morale < 35)

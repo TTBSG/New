@@ -1,14 +1,16 @@
 import { advisorMessage, dailyMessages, fairSalary, welcomeMessage } from './messages'
-import { STARTING_SECTORS, checkObjectives, isSectorUnlocked, setNetWorth } from './objectives'
+import { STARTING_SECTORS, checkObjectives, currentRank, isSectorUnlocked, setNetWorth } from './objectives'
 import { generateCity, getParcel, parcelRent, parcelTraffic, isVacant } from './city'
-import { FIRST_NAMES, LAST_NAMES, RANDOM_EVENTS, SECTORS, SUPPLIERS, getSector } from './sectors'
-import type { Business, Candidate, DayReport, Employee, GameState, ProductState, SupplierTier } from './types'
+import { FIRST_NAMES, LAST_NAMES, RANDOM_EVENTS, SECTORS, getSector } from './sectors'
+import { addBatch, productDef, stockOf, takeStock } from './stock'
+import { SUPPLIERS_RANK, closeDay, dailySupply, defaultSupplier, generateSuppliers, productQuality, receiveDeliveries, sectorSuppliers, unitCost } from './supply'
+import type { Business, Candidate, DayReport, Employee, GameState, ProductState } from './types'
 import { clamp, log, newId, pick, rand, randRange, round2, update } from './util'
 
 export { rand }
-export { fairSalary }
+export { fairSalary, unitCost }
 
-export const SAVE_VERSION = 4
+export const SAVE_VERSION = 5
 export const START_CASH = 60000
 const HISTORY_DAYS = 120
 const BANKRUPTCY_DAYS = 30
@@ -28,15 +30,14 @@ export function weekday(day: number): number {
 
 // ---------- Calculs dérivés ----------
 
-export function unitCost(sectorId: string, p: ProductState): number {
-  const def = getSector(sectorId).products.find((x) => x.id === p.id)!
-  return def.unitCost * SUPPLIERS[p.supplier].costMult
+/** Prix que les clients jugent « juste » compte tenu de la qualité du fournisseur. */
+export function perceivedPrice(s: GameState, sectorId: string, p: ProductState): number {
+  return productDef(sectorId, p.id).refPrice * (0.75 + productQuality(s, p) / 240)
 }
 
-/** Prix que les clients jugent « juste » compte tenu de la qualité. */
-export function perceivedPrice(sectorId: string, p: ProductState): number {
-  const def = getSector(sectorId).products.find((x) => x.id === p.id)!
-  return def.refPrice * (0.75 + SUPPLIERS[p.supplier].quality / 240)
+/** Ventes moyennes attendues par jour pour un produit au prix du marché. */
+export function expectedDemand(traffic: number, sectorId: string, productId: string): number {
+  return traffic * getSector(sectorId).trafficMult * productDef(sectorId, productId).baseShare
 }
 
 export function serviceCapacity(b: Business): number {
@@ -62,7 +63,7 @@ export function monthlyWages(b: Business): number {
 }
 
 export function stockValue(b: Business): number {
-  return b.products.reduce((sum, p) => sum + p.stock * unitCost(b.sectorId, p), 0)
+  return b.products.reduce((sum, p) => sum + stockOf(p) * productDef(b.sectorId, p.id).unitCost, 0)
 }
 
 export function businessValue(b: Business): number {
@@ -107,6 +108,9 @@ export function newGame(seed = Date.now() % 2147483647): GameState {
     sectorTrends: Object.fromEntries(SECTORS.map((x) => [x.id, 1])),
     events: [],
     city: { size: 0, roads: [], parcels: [] },
+    suppliers: [],
+    orders: [],
+    orderHistory: [],
     businesses: [],
     candidates: [],
     log: [],
@@ -119,6 +123,7 @@ export function newGame(seed = Date.now() % 2147483647): GameState {
     nextId: 1,
   }
   s.city = generateCity(() => rand(s))
+  generateSuppliers(s)
   refreshCandidates(s)
   welcomeMessage(s)
   log(s, `Bienvenue ! Vous démarrez avec ${START_CASH.toLocaleString('fr-FR')} €. Ouvrez votre première entreprise.`, 'good')
@@ -154,6 +159,7 @@ function refreshCandidates(s: GameState) {
 function simulateBusiness(s: GameState, b: Business): DayReport {
   const sector = getSector(b.sectorId)
   const parcel = getParcel(s.city, b.parcelId)
+  const purchases = receiveDeliveries(s, b)
 
   const eventMult = s.events
     .filter((e) => e.sectorId === null || e.sectorId === b.sectorId)
@@ -175,7 +181,7 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
   // Demande par produit selon le prix et la qualité perçue.
   const demands = b.products.map((p) => {
     const def = sector.products.find((x) => x.id === p.id)!
-    const ref = perceivedPrice(b.sectorId, p)
+    const ref = perceivedPrice(s, b.sectorId, p)
     const priceFactor = Math.min(2.5, (ref / Math.max(0.01, p.price)) ** sector.priceElasticity)
     return visitors * def.baseShare * priceFactor
   })
@@ -189,16 +195,17 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
   let lostToStockout = 0
   let qualitySum = 0
   let priceRatioSum = 0
+  const soldByProduct: Record<string, number> = {}
   b.products.forEach((p, i) => {
     const want = demands[i] * servedRatio
-    const sold = Math.min(p.stock, Math.floor(want + rand(s)))
-    p.stock -= sold
+    const sold = takeStock(p, Math.floor(want + rand(s)))
+    soldByProduct[p.id] = sold
     unitsSold += sold
     lostToStockout += Math.max(0, want - sold)
     revenue += sold * p.price
-    grossMargin += sold * (p.price - unitCost(b.sectorId, p))
-    qualitySum += SUPPLIERS[p.supplier].quality * demands[i]
-    priceRatioSum += (p.price / perceivedPrice(b.sectorId, p)) * demands[i]
+    grossMargin += sold * (p.price - unitCost(s, b.sectorId, p))
+    qualitySum += productQuality(s, p) * demands[i]
+    priceRatioSum += (p.price / perceivedPrice(s, b.sectorId, p)) * demands[i]
   })
   const lostToCapacity = totalDemand * (1 - servedRatio)
 
@@ -219,19 +226,8 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
 
   s.cash += revenue
 
-  // Réapprovisionnement automatique.
-  let purchases = 0
-  for (const p of b.products) {
-    if (p.restockTarget > p.stock) {
-      const qty = p.restockTarget - p.stock
-      const cost = qty * unitCost(b.sectorId, p)
-      if (s.cash >= cost) {
-        s.cash -= cost
-        purchases += cost
-        p.stock += qty
-      }
-    }
-  }
+  // Fin de journée : produits périmés jetés, commandes automatiques.
+  const { wasteValue, wasteByProduct } = closeDay(s, b, soldByProduct)
 
   const wages = monthlyWages(b) / 30
   const rent = (parcelRent(parcel) * b.rentMult) / 30
@@ -270,8 +266,11 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
     wages: round2(wages),
     rent: round2(rent),
     marketing,
-    profit: round2(grossMargin - wages - rent - marketing),
+    profit: round2(grossMargin - wasteValue - wages - rent - marketing),
     reputation: round2(b.reputation),
+    waste: wasteValue,
+    wasteByProduct,
+    soldByProduct,
   }
   s.stats.totalProfit += report.profit
   s.stats.totalRevenue += report.revenue
@@ -329,6 +328,7 @@ export function tick(state: GameState): GameState {
     } else {
       s.daysInDebt = 0
     }
+    dailySupply(s)
     dailyMessages(s)
     progress(s)
   })
@@ -359,23 +359,30 @@ export function openBusiness(state: GameState, sectorId: string, parcelId: strin
       products: sector.products.map((p) => ({
         id: p.id,
         price: p.refPrice,
-        stock: 0,
-        supplier: 'standard' as SupplierTier,
-        restockTarget: Math.max(1, Math.ceil(traffic * sector.trafficMult * p.baseShare * 1.5)),
+        batches: [],
+        supplierId: defaultSupplier(s, sectorId).id,
+        restockTarget: defaultTarget(traffic, sectorId, p.id),
+        auto: true,
       })),
     }
-    // Stock de départ.
+    // Stock de départ, livré à l'ouverture.
     for (const p of b.products) {
-      const c = p.restockTarget * unitCost(sectorId, p)
+      const c = p.restockTarget * unitCost(s, sectorId, p)
       if (s.cash >= c) {
         s.cash -= c
-        p.stock = p.restockTarget
+        addBatch(sectorId, p, p.restockTarget, s.day)
       }
     }
     s.businesses.push(b)
     log(s, `${b.name} (${sector.name}) ouvre ses portes au ${parcel.address} ! Pensez à recruter du personnel.`, 'good')
     progress(s)
   })
+}
+
+/** Stock cible conseillé : un jour de ventes pour les produits frais, trois jours sinon. */
+export function defaultTarget(traffic: number, sectorId: string, productId: string): number {
+  const life = productDef(sectorId, productId).shelfLife
+  return Math.max(1, Math.ceil(expectedDemand(traffic, sectorId, productId) * (life !== undefined && life <= 2 ? 1.05 : 3)))
 }
 
 function withBusiness(state: GameState, businessId: string, fn: (s: GameState, b: Business) => void): GameState {
@@ -387,13 +394,6 @@ export function setPrice(state: GameState, businessId: string, productId: string
   return withBusiness(state, businessId, (_, b) => {
     const p = b.products.find((x) => x.id === productId)
     if (p) p.price = Math.max(0.01, round2(price))
-  })
-}
-
-export function setSupplier(state: GameState, businessId: string, productId: string, supplier: SupplierTier): GameState {
-  return withBusiness(state, businessId, (_, b) => {
-    const p = b.products.find((x) => x.id === productId)
-    if (p) p.supplier = supplier
   })
 }
 
@@ -509,6 +509,31 @@ export function migrate(raw: GameState): GameState | null {
       'Chaque rang atteint rapporte une prime et débloque de nouveaux secteurs. J\'ai déjà validé ce que vous avez accompli.',
     ])
     s.version = 4
+  }
+  if (s.version === 4) {
+    // Arrivée des fournisseurs : le stock existant devient un lot, l'ancien niveau de gamme un fournisseur.
+    generateSuppliers(s)
+    s.orders = []
+    s.orderHistory = []
+    const tierOf: Record<string, string> = { eco: 'eco', standard: 'default', premium: 'premium' }
+    for (const b of s.businesses) {
+      for (const p of b.products as (ProductState & { stock?: number; supplier?: string })[]) {
+        const tier = tierOf[p.supplier ?? 'standard'] ?? 'default'
+        p.supplierId = (sectorSuppliers(s, b.sectorId).find((x) => x.tier === tier) ?? defaultSupplier(s, b.sectorId)).id
+        p.batches = []
+        p.auto = p.restockTarget > 0
+        addBatch(b.sectorId, p, p.stock ?? 0, s.day)
+        delete p.stock
+        delete p.supplier
+      }
+    }
+    advisorMessage(s, [
+      "Nouveau : les fournisseurs ! Vos commandes sont maintenant livrées avec un délai, et les produits frais périment s'ils ne sont pas vendus à temps.",
+      currentRank(s) >= SUPPLIERS_RANK
+        ? "Votre rang vous donne déjà accès à l'appli Fournisseurs : comparez qualité, prix, délais et fiabilité, négociez, et passez vos propres commandes."
+        : "L'appli Fournisseurs se débloque au rang 2. En attendant, le Grossiste du Coin vous livre chaque matin.",
+    ])
+    s.version = 5
   }
   return s.version === SAVE_VERSION ? s : null
 }

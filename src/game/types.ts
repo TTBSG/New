@@ -9,6 +9,8 @@ export interface ProductDef {
   refPrice: number
   /** Part des visiteurs qui achètent ce produit quand le prix est au niveau du marché. */
   baseShare: number
+  /** Nombre de jours de vente avant péremption (absent = ne périme pas). */
+  shelfLife?: number
 }
 
 export interface RoleDef {
@@ -70,15 +72,73 @@ export interface City {
   parcels: Parcel[]
 }
 
-export type SupplierTier = 'eco' | 'standard' | 'premium'
+export type SupplierTier = 'default' | 'eco' | 'premium' | 'bulk'
+
+export interface Supplier {
+  id: string
+  name: string
+  sectorId: SectorId
+  tier: SupplierTier
+  /** Qualité des produits 0-100. */
+  quality: number
+  /** Multiplicateur du coût d'achat de référence. */
+  priceMult: number
+  /** Jours entre la commande (le soir) et la livraison (le matin). */
+  leadDays: number
+  /** Probabilité de livrer à l'heure. */
+  reliability: number
+  /** En dessous de ce montant, des frais de livraison s'appliquent. */
+  minOrder: number
+  deliveryFee: number
+  active: boolean
+  /** Total acheté par le joueur (fidélité). */
+  spent: number
+  /** Remise obtenue en négociant. */
+  negotiated: number
+  negotiatedDay: number
+}
+
+/** Un lot de marchandise, avec sa date de péremption éventuelle. */
+export interface StockBatch {
+  qty: number
+  /** Dernier jour où le lot peut être vendu (null = ne périme pas). */
+  expiresDay: number | null
+}
 
 export interface ProductState {
   id: string
   price: number
-  stock: number
-  supplier: SupplierTier
-  /** Stock visé lors du réapprovisionnement automatique (0 = désactivé). */
+  batches: StockBatch[]
+  /** Fournisseur utilisé pour les commandes automatiques. */
+  supplierId: string
+  /** Stock visé par les commandes automatiques. */
   restockTarget: number
+  /** Commandes automatiques activées. */
+  auto: boolean
+}
+
+export interface OrderLine {
+  productId: string
+  qty: number
+}
+
+export interface Order {
+  id: string
+  businessId: string
+  supplierId: string
+  lines: OrderLine[]
+  /** Montant à payer à la livraison (remises et frais compris). */
+  total: number
+  placedDay: number
+  dueDay: number
+  auto: boolean
+  /** Déjà retardée une fois (on ne la retarde pas deux fois). */
+  delayed: boolean
+}
+
+export interface OrderRecord extends Order {
+  status: 'livrée' | 'annulée'
+  closedDay: number
 }
 
 export interface Employee {
@@ -110,6 +170,10 @@ export interface DayReport {
   profit: number
   /** Réputation en fin de journée (absente des anciennes sauvegardes). */
   reputation?: number
+  /** Valeur des produits jetés car périmés. */
+  waste?: number
+  wasteByProduct?: Record<string, number>
+  soldByProduct?: Record<string, number>
 }
 
 export interface Business {
@@ -207,6 +271,9 @@ export interface GameState {
   sectorTrends: Record<SectorId, number>
   events: MarketEvent[]
   city: City
+  suppliers: Supplier[]
+  orders: Order[]
+  orderHistory: OrderRecord[]
   businesses: Business[]
   candidates: Candidate[]
   log: LogEntry[]

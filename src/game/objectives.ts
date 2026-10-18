@@ -20,6 +20,7 @@ export interface RankDef {
   title: string
   /** Récompenses du rang complété. */
   unlockSectors: string[]
+  unlockApps: string[]
   prime: number
 }
 
@@ -37,11 +38,11 @@ export function setNetWorth(fn: (s: GameState) => number) {
 }
 
 export const RANKS: RankDef[] = [
-  { rank: 1, title: 'Premiers pas', unlockSectors: ['restaurant', 'vetements'], prime: 3000 },
-  { rank: 2, title: 'Boutique de quartier', unlockSectors: ['electronique'], prime: 8000 },
-  { rank: 3, title: 'Petite enseigne', unlockSectors: [], prime: 15000 },
-  { rank: 4, title: 'Réseau local', unlockSectors: [], prime: 30000 },
-  { rank: 5, title: 'Empire', unlockSectors: [], prime: 0 },
+  { rank: 1, title: 'Premiers pas', unlockSectors: ['restaurant', 'vetements'], unlockApps: ['Fournisseurs'], prime: 3000 },
+  { rank: 2, title: 'Boutique de quartier', unlockSectors: ['electronique'], unlockApps: [], prime: 8000 },
+  { rank: 3, title: 'Petite enseigne', unlockSectors: [], unlockApps: [], prime: 15000 },
+  { rank: 4, title: 'Réseau local', unlockSectors: [], unlockApps: [], prime: 30000 },
+  { rank: 5, title: 'Empire', unlockSectors: [], unlockApps: [], prime: 0 },
 ]
 
 export const OBJECTIVES: ObjectiveDef[] = [
@@ -122,6 +123,7 @@ export function checkObjectives(s: GameState): string[][] {
         [
           r.prime ? `Une prime de ${eur(r.prime)} vous est versée.` : '',
           unlocked.length ? `Vous pouvez désormais ouvrir : ${unlocked.join(', ')}.` : '',
+          r.unlockApps.length ? `Nouvelle appli sur votre téléphone : ${r.unlockApps.join(', ')}. Choisissez vos fournisseurs, comparez qualité, prix et délais, et passez vos propres commandes.` : '',
           'Vos nouveaux objectifs sont dans l\'appli Objectifs.',
         ]
           .filter(Boolean)
