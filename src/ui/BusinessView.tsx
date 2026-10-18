@@ -14,10 +14,9 @@ import {
   setSalary,
   severance,
   stockValue,
-  unitCost,
 } from '../game/engine'
 import { expiringToday, productDef, stockOf } from '../game/stock'
-import { autoTarget, getSupplier, pendingOrders, sectorSuppliers, setAuto, setProductSupplier, suppliersUnlocked, SUPPLIERS_RANK } from '../game/supply'
+import { autoTarget, costOf, getSupplier, pendingOrders, sectorSuppliers, setAuto, setProductSupplier, suppliersUnlocked, SUPPLIERS_RANK } from '../game/supply'
 import { getParcel } from '../game/city'
 import { diagnose } from '../game/diagnose'
 import { getSector } from '../game/sectors'
@@ -142,7 +141,7 @@ function ProductCard({ state, b, p, act }: { state: GameState; b: Business; p: P
   const [choosing, setChoosing] = useState(false)
   const def = productDef(b.sectorId, p.id)
   const supplier = getSupplier(state, p.supplierId)
-  const cost = unitCost(state, b.sectorId, p)
+  const cost = costOf(state, b.sectorId, p)
   const margin = p.price > 0 ? ((p.price - cost) / p.price) * 100 : 0
   const fair = perceivedPrice(state, b.sectorId, p)
   const ratio = p.price / fair
@@ -179,6 +178,21 @@ function ProductCard({ state, b, p, act }: { state: GameState; b: Business; p: P
         ))}
       </div>
 
+      {p.fromWarehouse ? (
+        <div className="field">
+          <label>Approvisionnement</label>
+          <div className="supplier-row">
+            <span className="choice-main">
+              <strong>
+                <Icon name="truck" size={14} /> Livré chaque nuit par votre entrepôt
+              </strong>
+              <span className="small muted">
+                Acheté chez {supplier.name} · coût moyen {eurCents(cost)} · à régler dans l'appli Logistique
+              </span>
+            </span>
+          </div>
+        </div>
+      ) : (
       <div className="field">
         <label>Fournisseur</label>
         <button className="supplier-row" onClick={() => unlocked && setChoosing(!choosing)}>
@@ -211,6 +225,7 @@ function ProductCard({ state, b, p, act }: { state: GameState; b: Business; p: P
           </div>
         )}
       </div>
+      )}
 
       <div className="field">
         <label>Réapprovisionnement</label>

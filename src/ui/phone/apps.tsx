@@ -2,6 +2,7 @@ import { getParcel } from '../../game/city'
 import { useRef, useState } from 'react'
 import { businessValue, hire, migrate, monthlyWages, netWorth, serviceCapacity } from '../../game/engine'
 import { hqMonthlyCost } from '../../game/hq'
+import { warehouseMonthlyCost } from '../../game/warehouse'
 import { getSector } from '../../game/sectors'
 import type { Business, GameState } from '../../game/types'
 import { BarChart, Section, Stat } from '../common'
@@ -83,6 +84,12 @@ export function ComptaApp({ state }: { state: GameState }) {
       {state.hq && (
         <p className="small muted">
           Frais du siège : {eur(hqMonthlyCost(state))}/mois (loyer et salaires de bureau), non inclus dans le bénéfice des commerces ci-dessous.
+        </p>
+      )}
+      {state.warehouses.length > 0 && (
+        <p className="small muted">
+          Frais logistiques : {eur(state.warehouses.reduce((a, w) => a + warehouseMonthlyCost(state, w), 0))}/mois hors carburant ({state.warehouses.length} entrepôt
+          {state.warehouses.length > 1 ? 's' : ''}), non inclus non plus.
         </p>
       )}
       {state.businesses.length > 0 && (

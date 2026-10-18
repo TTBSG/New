@@ -115,6 +115,10 @@ export interface ProductState {
   restockTarget: number
   /** Commandes automatiques activées. */
   auto: boolean
+  /** Réapprovisionné chaque nuit par l'entrepôt du groupe plutôt que par un fournisseur. */
+  fromWarehouse?: boolean
+  /** Coût moyen réellement payé pour le stock en rayon (remises comprises). */
+  avgCost?: number
 }
 
 export interface OrderLine {
@@ -124,6 +128,7 @@ export interface OrderLine {
 
 export interface Order {
   id: string
+  /** Destinataire : un commerce ou un entrepôt. */
   businessId: string
   supplierId: string
   lines: OrderLine[]
@@ -279,6 +284,30 @@ export interface Headquarters {
   openedDay: number
 }
 
+export interface WarehouseDay {
+  day: number
+  received: number
+  shipped: number
+  waste: number
+  cost: number
+  /** Boutiques qui n'ont pas pu être livrées faute de camions ou de magasiniers. */
+  unserved: number
+}
+
+export interface Warehouse {
+  id: string
+  parcelId: string
+  sectorId: SectorId
+  level: number
+  cold: boolean
+  handlers: number
+  trucks: number
+  /** Stock de l'entrepôt (le prix de vente n'y sert pas). */
+  products: ProductState[]
+  history: WarehouseDay[]
+  openedDay: number
+}
+
 /** Célébration à afficher (objectif atteint, nouveau rang). */
 export interface Celebration {
   id: string
@@ -304,6 +333,7 @@ export interface GameState {
   city: City
   hq: Headquarters | null
   officeCandidates: OfficeEmployee[]
+  warehouses: Warehouse[]
   suppliers: Supplier[]
   orders: Order[]
   orderHistory: OrderRecord[]

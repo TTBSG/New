@@ -62,12 +62,32 @@ const Ground = memo(function Ground({ city, overlay }: { city: City; overlay: Ov
   return <g>{tiles}</g>
 })
 
-const Objects = memo(function Objects({ city, shops, hq, faded }: { city: City; shops: Record<string, string>; hq: { parcelId: string; height: number } | null; faded: boolean }) {
+export type WarehouseMark = { parcelId: string; sectorId: string; height: number; shops: string[] }
+
+const Objects = memo(function Objects({
+  city,
+  shops,
+  hq,
+  warehouses,
+  faded,
+}: {
+  city: City
+  shops: Record<string, string>
+  hq: { parcelId: string; height: number } | null
+  warehouses: WarehouseMark[]
+  faded: boolean
+}) {
   const sorted = useMemo(() => [...city.parcels].sort((a, b) => a.i + a.j - (b.i + b.j) || a.i - b.i), [city])
   return (
     <g className={faded ? 'faded' : undefined}>
       {sorted.map((p) => (
-        <ParcelObject key={p.id} parcel={p} shopSectorId={shops[p.id]} hqHeight={hq?.parcelId === p.id ? hq.height : undefined} />
+        <ParcelObject
+          key={p.id}
+          parcel={p}
+          shopSectorId={shops[p.id]}
+          hqHeight={hq?.parcelId === p.id ? hq.height : undefined}
+          warehouse={warehouses.find((w) => w.parcelId === p.id)}
+        />
       ))}
     </g>
   )
@@ -101,6 +121,34 @@ const Walkers = memo(function Walkers({ i, j, visitors }: { i: number; j: number
   )
 })
 
+/** Un camion fait le tour des boutiques livrées par l'entrepôt, en suivant les axes de la grille. */
+const Trucks = memo(function Trucks({ from, to }: { from: Parcel; to: Parcel[] }) {
+  if (!to.length) return null
+  const stops = [from, ...to, from]
+  let path = ''
+  for (let k = 0; k < stops.length; k++) {
+    const a = stops[k]
+    const [x, y] = P(a.i + 0.5, a.j + 1.1)
+    if (k === 0) path += `M${x.toFixed(1)},${y.toFixed(1)}`
+    else {
+      const prev = stops[k - 1]
+      const [cx, cy] = P(a.i + 0.5, prev.j + 1.1)
+      path += ` L${cx.toFixed(1)},${cy.toFixed(1)} L${x.toFixed(1)},${y.toFixed(1)}`
+    }
+  }
+  return (
+    <g pointerEvents="none">
+      <g>
+        <rect x={-7} y={-9} width={14} height={8} rx={2} fill="#f4f4f4" stroke="#9aa0ad" strokeWidth={0.8} />
+        <rect x={3} y={-7} width={5} height={6} rx={1} fill="#e8743b" />
+        <circle cx={-4} cy={-1} r={1.6} fill="#3b2f2a" />
+        <circle cx={4} cy={-1} r={1.6} fill="#3b2f2a" />
+        <animateMotion dur={`${8 + to.length * 6}s`} repeatCount="indefinite" path={path} />
+      </g>
+    </g>
+  )
+})
+
 const DISTRICT_LABELS: [number, number, string][] = [
   [3.5, 3.5, 'RÉSIDENTIEL'],
   [9.5, 3.5, 'AFFAIRES'],
@@ -112,6 +160,7 @@ export function CityMap({
   city,
   businesses,
   hq,
+  warehouses,
   selectedId,
   overlay,
   onSelect,
@@ -119,6 +168,7 @@ export function CityMap({
   city: City
   businesses: Business[]
   hq: { parcelId: string; height: number } | null
+  warehouses: WarehouseMark[]
   selectedId: string | null
   overlay: Overlay
   onSelect: (parcelId: string | null) => void
@@ -250,7 +300,7 @@ export function CityMap({
           <g transform={`translate(${view.x.toFixed(1)} ${view.y.toFixed(1)}) scale(${view.k.toFixed(3)})`}>
             <Ground city={city} overlay={overlay} />
             {selected && <polygon points={diamond(selected.i, selected.j, 0.04)} fill="none" stroke="#e8743b" strokeWidth={3} className="sel-ring" />}
-            <Objects city={city} shops={shops} hq={hq} faded={overlay !== 'none'} />
+            <Objects city={city} shops={shops} hq={hq} warehouses={warehouses} faded={overlay !== 'none'} />
             {DISTRICT_LABELS.map(([a, b, t]) => {
               const [x, y] = P(a, b)
               return (
@@ -287,6 +337,21 @@ export function CityMap({
                 </g>
               )
             })}
+            {warehouses.map((w) => (
+              <Trucks key={w.parcelId} from={parcelsById[w.parcelId]} to={w.shops.map((id) => parcelsById[id]).filter(Boolean)} />
+            ))}
+            {warehouses.map((w) => {
+              const p = parcelsById[w.parcelId]
+              const [x, y] = P(p.i + 0.5, p.j + 0.5, w.height + 16)
+              return (
+                <g key={w.parcelId} data-parcel={p.id} transform={`translate(${x} ${y})`}>
+                  <g className={selectedId === p.id ? 'pin-bounce' : undefined}>
+                    <path d="M0 0 C-14 -16 -14 -34 0 -34 C14 -34 14 -16 0 0Z" fill="#6b7280" stroke="#fff" strokeWidth={2.5} />
+                    <Icon name="truck" size={16} x={-8} y={-29} color="#fff" strokeWidth={2.2} />
+                  </g>
+                </g>
+              )
+            })}
             {hq &&
               (() => {
                 const p = parcelsById[hq.parcelId]
@@ -300,7 +365,7 @@ export function CityMap({
                   </g>
                 )
               })()}
-            {selected && !shops[selected.id] && selected.id !== hq?.parcelId && (
+            {selected && !shops[selected.id] && selected.id !== hq?.parcelId && !warehouses.some((w) => w.parcelId === selected.id) && (
               <g transform={`translate(${P(selected.i + 0.5, selected.j + 0.5)[0]} ${P(selected.i + 0.5, selected.j + 0.5)[1] - 44})`} pointerEvents="none">
                 <g className="pin-bounce">
                   <path d="M-9 -12 L0 0 L9 -12Z" fill="#e8743b" stroke="#fff" strokeWidth={2} />

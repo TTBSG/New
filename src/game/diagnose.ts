@@ -40,6 +40,10 @@ export function diagnose(s: GameState, b: Business): Insight[] {
     else if (ratio < 0.8) out.push({ tone: 'warn', text: `Vous bradez « ${def.name} » : vous pourriez le vendre plus cher sans perdre beaucoup de clients.` })
   }
 
+  const wh = s.warehouses.find((w) => w.sectorId === b.sectorId)
+  if (wh && b.products.some((p) => p.fromWarehouse) && (wh.history.at(-1)?.unserved ?? 0) > 0)
+    out.push({ tone: 'warn', text: "L'entrepôt n'a pas pu livrer toutes les boutiques cette nuit : ajoutez des camions ou des magasiniers dans l'appli Logistique." })
+
   const late = pendingOrders(s, b.id).filter((o) => o.delayed)
   if (late.length) out.push({ tone: 'warn', text: `Livraison en retard chez ${late.map((o) => getSupplier(s, o.supplierId).name).join(', ')} : attention aux ruptures.` })
 

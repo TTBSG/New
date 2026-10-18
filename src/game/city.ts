@@ -86,5 +86,5 @@ export function isVacant(p: Parcel, businesses: Business[]): boolean {
 
 /** Local libre : ni commerce, ni siège social, ni entrepôt dessus. */
 export function isFree(s: GameState, p: Parcel): boolean {
-  return isVacant(p, s.businesses) && s.hq?.parcelId !== p.id
+  return isVacant(p, s.businesses) && s.hq?.parcelId !== p.id && !s.warehouses.some((w) => w.parcelId === p.id)
 }

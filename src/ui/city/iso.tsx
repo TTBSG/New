@@ -111,8 +111,36 @@ function Tree({ a, b }: { a: number; b: number }) {
 
 // ---------- Contenu d'une parcelle ----------
 
-export const ParcelObject = memo(function ParcelObject({ parcel, shopSectorId, hqHeight }: { parcel: Parcel; shopSectorId?: string; hqHeight?: number }) {
+export const ParcelObject = memo(function ParcelObject({
+  parcel,
+  shopSectorId,
+  hqHeight,
+  warehouse,
+}: {
+  parcel: Parcel
+  shopSectorId?: string
+  hqHeight?: number
+  warehouse?: { sectorId: string; height: number }
+}) {
   const { i, j, districtId, kind, height, variant } = parcel
+
+  if (warehouse) {
+    // Entrepôt : grand hangar bas, porte de quai et bande aux couleurs du secteur.
+    const inset = 0.06
+    const h = warehouse.height
+    const color = getSector(warehouse.sectorId).color
+    return (
+      <g data-parcel={parcel.id}>
+        <Box i={i} j={j} h={h} color="#c9ccd3" inset={inset} roof="#9aa0ad" />
+        <polygon
+          points={pts([frontPoint(i, j, inset, 0, h * 0.82), frontPoint(i, j, inset, 1, h * 0.82), frontPoint(i, j, inset, 1, h * 0.68), frontPoint(i, j, inset, 0, h * 0.68)])}
+          fill={color}
+        />
+        <polygon points={pts([frontPoint(i, j, inset, 0.2, 0), frontPoint(i, j, inset, 0.55, 0), frontPoint(i, j, inset, 0.55, h * 0.55), frontPoint(i, j, inset, 0.2, h * 0.55)])} fill="#7d8391" />
+        <polygon points={pts([frontPoint(i, j, inset, 0.65, 0), frontPoint(i, j, inset, 0.85, 0), frontPoint(i, j, inset, 0.85, h * 0.55), frontPoint(i, j, inset, 0.65, h * 0.55)])} fill="#7d8391" />
+      </g>
+    )
+  }
 
   if (hqHeight) {
     // Siège social : tour vitrée surmontée d'un drapeau aux couleurs du groupe.

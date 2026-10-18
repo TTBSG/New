@@ -2,7 +2,7 @@ import { purchasingRate, reliabilityBoost } from './hq'
 import { supplierMessage } from './messages'
 import { currentRank } from './objectives'
 import { SECTORS, SUPPLIER_NAMES, getSector } from './sectors'
-import { addBatch, expireStock, productDef, stockOf } from './stock'
+import { addBatch, expireStock, productDef, stockOf, updateAvgCost } from './stock'
 import type { Business, GameState, Order, OrderLine, ProductState, Supplier, SupplierTier } from './types'
 import { clamp, log, newId, pick, rand, randRange, round2, update } from './util'
 
@@ -52,6 +52,11 @@ export function unitCost(s: GameState, sectorId: string, p: ProductState): numbe
   return productDef(sectorId, p.id).unitCost * getSupplier(s, p.supplierId).priceMult
 }
 
+/** Coût d'achat effectif d'une unité en stock (coût moyen payé, ou prix catalogue à défaut). */
+export function costOf(s: GameState, sectorId: string, p: ProductState): number {
+  return p.avgCost ?? unitCost(s, sectorId, p)
+}
+
 export function productQuality(s: GameState, p: ProductState): number {
   return getSupplier(s, p.supplierId).quality
 }
@@ -94,10 +99,10 @@ export function incoming(s: GameState, businessId: string, productId: string): n
   return pendingOrders(s, businessId).reduce((n, o) => n + o.lines.filter((l) => l.productId === productId).reduce((a, l) => a + l.qty, 0), 0)
 }
 
-function createOrder(s: GameState, b: Business, supplier: Supplier, lines: OrderLine[], auto: boolean): Order | null {
+export function createOrder(s: GameState, b: { id: string; sectorId: string }, supplier: Supplier, lines: OrderLine[], auto: boolean, extraRate = 0): Order | null {
   lines = lines.filter((l) => l.qty > 0)
   if (!lines.length) return null
-  const q = quote(supplier, b.sectorId, lines, purchasingRate(s))
+  const q = quote(supplier, b.sectorId, lines, purchasingRate(s) + extraRate)
   // Le fournisseur vérifie la solvabilité au moment de la commande ; le paiement a lieu à la livraison.
   if (s.cash < q.total) return null
   const order: Order = { id: newId(s, 'o'), businessId: b.id, supplierId: supplier.id, lines, total: q.total, placedDay: s.day, dueDay: s.day + supplier.leadDays, auto, delayed: false }
@@ -105,27 +110,32 @@ function createOrder(s: GameState, b: Business, supplier: Supplier, lines: Order
   return order
 }
 
-function archive(s: GameState, o: Order, status: 'livrée' | 'annulée') {
+export function archive(s: GameState, o: Order, status: 'livrée' | 'annulée') {
   s.orders = s.orders.filter((x) => x.id !== o.id)
   s.orderHistory.unshift({ ...o, status, closedDay: s.day })
   if (s.orderHistory.length > HISTORY_SIZE) s.orderHistory.length = HISTORY_SIZE
 }
 
-/** Livraisons du matin. Renvoie le montant payé. */
-export function receiveDeliveries(s: GameState, b: Business): number {
+/** Livraisons du matin dans un commerce ou un entrepôt. Renvoie le montant payé. */
+export function receiveInto(s: GameState, destId: string, destName: string, sectorId: string, products: ProductState[], extraLife = 0): number {
   let paid = 0
-  for (const o of pendingOrders(s, b.id).filter((x) => x.dueDay <= s.day)) {
+  for (const o of s.orders.filter((x) => x.businessId === destId && x.dueDay <= s.day)) {
     const supplier = getSupplier(s, o.supplierId)
     if (!o.delayed && rand(s) > Math.min(0.995, supplier.reliability + reliabilityBoost(s))) {
       const delay = 1 + Math.floor(rand(s) * 3)
       o.delayed = true
       o.dueDay += delay
-      supplierMessage(s, supplier.name, `Fournisseur · ${b.name}`, [`Désolés, votre livraison est retardée de ${delay} jour${delay > 1 ? 's' : ''} (problème de transport).`])
+      supplierMessage(s, supplier.name, `Fournisseur · ${destName}`, [`Désolés, votre livraison est retardée de ${delay} jour${delay > 1 ? 's' : ''} (problème de transport).`])
       continue
     }
+    // Le prix réellement payé (remises et frais compris) est réparti au prorata du prix catalogue.
+    const list = o.lines.reduce((a, l) => a + l.qty * productDef(sectorId, l.productId).unitCost * supplier.priceMult, 0)
+    const factor = list > 0 ? o.total / list : 1
     for (const l of o.lines) {
-      const p = b.products.find((x) => x.id === l.productId)
-      if (p) addBatch(b.sectorId, p, l.qty, s.day)
+      const p = products.find((x) => x.id === l.productId)
+      if (!p) continue
+      updateAvgCost(p, l.qty, productDef(sectorId, l.productId).unitCost * supplier.priceMult * factor)
+      addBatch(sectorId, p, l.qty, s.day, extraLife)
     }
     s.cash -= o.total
     paid += o.total
@@ -133,6 +143,10 @@ export function receiveDeliveries(s: GameState, b: Business): number {
     archive(s, o, 'livrée')
   }
   return paid
+}
+
+export function receiveDeliveries(s: GameState, b: Business): number {
+  return receiveInto(s, b.id, b.name, b.sectorId, b.products)
 }
 
 /** Seuil de recommande : les produits très frais sont complétés chaque soir, les autres sous 70 % de la cible. */
@@ -164,18 +178,26 @@ export function closeDay(s: GameState, b: Business, soldToday: Record<string, nu
     const n = expireStock(p, s.day)
     if (n) {
       wasteByProduct[p.id] = n
-      wasteValue += n * unitCost(s, b.sectorId, p)
+      wasteValue += n * costOf(s, b.sectorId, p)
     }
   }
 
   // Un produit sous son seuil déclenche une commande ; on complète alors tous les produits du même fournisseur.
   const position = (p: ProductState) => stockOf(p) + incoming(s, b.id, p.id)
   const target = (p: ProductState) => autoTarget(b, p, soldToday)
-  const triggered = new Set(b.products.filter((p) => p.auto && target(p) > 0 && position(p) < target(p) * reorderThreshold(b.sectorId, p)).map((p) => p.supplierId))
+  // Un produit rattaché à l'entrepôt n'est commandé au fournisseur qu'en secours, si l'entrepôt ne peut pas suivre.
+  const warehouse = s.warehouses.find((w) => w.sectorId === b.sectorId)
+  const covered = (p: ProductState) => {
+    if (!p.fromWarehouse || !warehouse) return false
+    const wp = warehouse.products.find((x) => x.id === p.id)
+    return !!wp && stockOf(wp) >= Math.max(1, target(p) - position(p))
+  }
+  const ordersHere = (p: ProductState) => p.auto && !covered(p)
+  const triggered = new Set(b.products.filter((p) => ordersHere(p) && target(p) > 0 && position(p) < target(p) * reorderThreshold(b.sectorId, p)).map((p) => p.supplierId))
   for (const supplierId of triggered) {
     const supplier = getSupplier(s, supplierId)
     const lines = b.products
-      .filter((p) => p.auto && p.supplierId === supplierId)
+      .filter((p) => ordersHere(p) && p.supplierId === supplierId)
       .map((p) => ({ productId: p.id, qty: Math.max(0, Math.ceil(target(p) - position(p))) }))
     if (!createOrder(s, b, supplier, lines, true)) log(s, `${b.name} : commande automatique chez ${supplier.name} impossible, trésorerie insuffisante.`, 'bad')
   }

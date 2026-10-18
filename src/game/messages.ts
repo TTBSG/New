@@ -2,7 +2,7 @@ import { getParcel, parcelRent } from './city'
 import { HQ_RANK, SHOPS_WITHOUT_HQ, canDelegate } from './hq'
 import { currentRank } from './objectives'
 import { getSector } from './sectors'
-import { addBatch } from './stock'
+import { addBatch, updateAvgCost } from './stock'
 import type { Business, Choice, Conversation, ConversationKind, Employee, GameState } from './types'
 import { clamp, log, newId, pick, rand, randRange, update } from './util'
 
@@ -301,6 +301,7 @@ function applyChoice(s: GameState, c: Conversation, choiceId: string): string | 
       if (s.cash < c.amount!) return 'Votre trésorerie ne permet pas ce paiement.'
       const p = b!.products.find((x) => x.id === c.productId)!
       s.cash -= c.amount!
+      updateAvgCost(p, c.quantity!, c.amount! / c.quantity!)
       addBatch(b!.sectorId, p, c.quantity!, s.day)
       log(s, `Achat groupé pour ${b!.name} : ${c.quantity} unités pour ${eur(c.amount!)}.`)
       return 'Parfait, la livraison arrive aujourd\'hui !'

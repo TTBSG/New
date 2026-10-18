@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getParcel, isFree, parcelRent, parcelTraffic } from '../game/city'
 import { HQ_LEVELS, HQ_RANK, hqLevel, hqOpeningCost, hqUnlocked, maxBusinesses, openHq } from '../game/hq'
+import { WAREHOUSE_DISTRICT, canOpenWarehouseHere, openWarehouse, servedShops, warehouseLevel, warehouseOf, warehouseOpeningCost, warehouseStock } from '../game/warehouse'
 import { openBusiness, openingCost, serviceCapacity } from '../game/engine'
 import { isSectorUnlocked, sectorUnlockRank } from '../game/objectives'
 import { SECTORS, getDistrict, getSector } from '../game/sectors'
 import type { GameState } from '../game/types'
-import { CityMap, type Overlay } from './city/CityMap'
+import { CityMap, type Overlay, type WarehouseMark } from './city/CityMap'
 import { eur, num, signed } from './format'
 import { Icon, type IconName } from './icons'
 import type { Act } from './useGame'
@@ -21,17 +22,20 @@ export function CityView({
   act,
   onManage,
   onHq,
+  onWarehouse,
   onSheetChange,
 }: {
   state: GameState
   act: Act
   onManage: (businessId: string) => void
   onHq: () => void
+  onWarehouse: (warehouseId: string) => void
   onSheetChange: (open: boolean) => void
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [overlay, setOverlay] = useState<Overlay>('none')
   const [picking, setPicking] = useState(false)
+  const [pickingWarehouse, setPickingWarehouse] = useState(false)
 
   useEffect(() => onSheetChange(selectedId !== null), [selectedId, onSheetChange])
 
@@ -44,6 +48,20 @@ export function CityView({
   // Objet stable tant que le siège ne change pas, pour ne pas redessiner toute la ville.
   const hqOnMap = useMemo(() => (hqParcelId ? { parcelId: hqParcelId, height: hqHeight } : null), [hqParcelId, hqHeight])
   const atLimit = state.businesses.length >= maxBusinesses(state)
+  const warehouse = parcel ? state.warehouses.find((w) => w.parcelId === parcel.id) : undefined
+  // Clé stable : la carte ne se redessine que si un entrepôt ou ses boutiques livrées changent.
+  const warehouseKey = state.warehouses.map((w) => `${w.parcelId}:${w.sectorId}:${w.level}:${servedShops(state, w).map((b) => b.parcelId).join(',')}`).join('|')
+  const warehouseMarks = useMemo<WarehouseMark[]>(
+    () =>
+      warehouseKey
+        ? warehouseKey.split('|').map((k) => {
+            const [parcelId, sectorId, level, shops] = k.split(':')
+            return { parcelId, sectorId, height: [22, 28, 34][Number(level) - 1], shops: shops ? shops.split(',') : [] }
+          })
+        : [],
+    [warehouseKey],
+  )
+  const ownedSectors = [...new Set(state.businesses.map((b) => b.sectorId))].filter((id) => !warehouseOf(state, id))
 
   return (
     <div className="cityview">
@@ -51,11 +69,13 @@ export function CityView({
         city={state.city}
         businesses={state.businesses}
         hq={hqOnMap}
+        warehouses={warehouseMarks}
         selectedId={selectedId}
         overlay={overlay}
         onSelect={(id) => {
           setSelectedId(id)
           setPicking(false)
+          setPickingWarehouse(false)
         }}
       />
 
@@ -124,7 +144,40 @@ export function CityView({
             </>
           )}
 
-          {vacant && !picking && (
+          {vacant && !picking && pickingWarehouse && (
+            <>
+              <h3 className="sheet-h">Entrepôt pour quel secteur ?</h3>
+              <p className="small muted">Un entrepôt par secteur. Il achète en gros et livre chaque nuit vos boutiques de ce secteur. Coût : {eur(warehouseOpeningCost(state, parcel.id))} (aménagement + caution).</p>
+              <div className="sector-list">
+                {ownedSectors.map((id) => (
+                  <button
+                    key={id}
+                    className="choice"
+                    disabled={state.cash < warehouseOpeningCost(state, parcel.id)}
+                    onClick={() => {
+                      act(openWarehouse, parcel.id, id)
+                      setPickingWarehouse(false)
+                      setSelectedId(null)
+                    }}
+                  >
+                    <span className="sector-badge" style={{ background: getSector(id).color }}>
+                      <Icon name={id as IconName} size={20} />
+                    </span>
+                    <span className="choice-main">
+                      <strong>{getSector(id).name}</strong>
+                      <span className="muted small">{state.businesses.filter((b) => b.sectorId === id).length} boutique(s) à livrer</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {!ownedSectors.length && <p className="small warn">Chacun de vos secteurs a déjà son entrepôt.</p>}
+              <button className="btn block" onClick={() => setPickingWarehouse(false)}>
+                Retour
+              </button>
+            </>
+          )}
+
+          {vacant && !picking && !pickingWarehouse && (
             <>
               <div className="sheet-title">
                 <span className="sector-badge" style={{ background: '#e8743b' }}>
@@ -172,6 +225,53 @@ export function CityView({
                   <Icon name="tower" size={18} /> Installer le siège ici · {eur(hqOpeningCost(state, parcel.id))}
                 </button>
               )}
+              {canOpenWarehouseHere(state, parcel.id) && (
+                <button className="btn block hq-btn" onClick={() => setPickingWarehouse(true)}>
+                  <Icon name="truck" size={18} /> Installer un entrepôt ici
+                </button>
+              )}
+              {parcel.districtId === WAREHOUSE_DISTRICT && !canOpenWarehouseHere(state, parcel.id) && state.hq && (
+                <p className="small muted">Les entrepôts s'installent ici, dans la zone commerciale, dès le rang 4 avec un directeur logistique au siège.</p>
+              )}
+            </>
+          )}
+
+          {warehouse && (
+            <>
+              <div className="sheet-title">
+                <span className="sector-badge" style={{ background: '#6b7280' }}>
+                  <Icon name="truck" size={20} />
+                </span>
+                <div>
+                  <h3>Entrepôt {getSector(warehouse.sectorId).name.toLowerCase()}</h3>
+                  <span className="muted small">
+                    {warehouseLevel(warehouse).name} · {parcel.address}
+                  </span>
+                </div>
+              </div>
+              <div className="tiles">
+                <div className="tile">
+                  <strong>{Math.round((warehouseStock(warehouse) / warehouseLevel(warehouse).capacity) * 100)} %</strong>
+                  <small>rempli</small>
+                </div>
+                <div className="tile">
+                  <strong>{servedShops(state, warehouse).length}</strong>
+                  <small>boutiques livrées</small>
+                </div>
+                <div className="tile">
+                  <strong>{num(warehouse.history.at(-1)?.shipped ?? 0)}</strong>
+                  <small>unités expédiées</small>
+                </div>
+              </div>
+              <button
+                className="btn primary block"
+                onClick={() => {
+                  setSelectedId(null)
+                  onWarehouse(warehouse.id)
+                }}
+              >
+                Gérer l'entrepôt
+              </button>
             </>
           )}
 
@@ -228,7 +328,7 @@ export function CityView({
             />
           )}
 
-          {!business && !vacant && !isHq && (
+          {!business && !vacant && !isHq && !warehouse && (
             <>
               <div className="sheet-title">
                 <span className="sector-badge" style={{ background: '#9a9590' }}>

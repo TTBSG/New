@@ -12,16 +12,19 @@ import { ObjectivesApp } from './ObjectivesApp'
 import { SuppliersApp } from './SuppliersApp'
 import { HqApp } from './HqApp'
 import { HQ_RANK } from '../../game/hq'
+import { WAREHOUSE_RANK } from '../../game/warehouse'
+import { LogisticsApp } from './LogisticsApp'
 import { SUPPLIERS_RANK } from '../../game/supply'
 import { activeObjectives, currentRank, rankTitle } from '../../game/objectives'
 import { Meter } from '../common'
 
-export type AppId = 'messages' | 'commerces' | 'banque' | 'compta' | 'recrut' | 'actus' | 'reglages' | 'objectifs' | 'avenir' | 'fournisseurs' | 'siege'
+export type AppId = 'messages' | 'commerces' | 'banque' | 'compta' | 'recrut' | 'actus' | 'reglages' | 'objectifs' | 'avenir' | 'fournisseurs' | 'siege' | 'logistique'
 
 export interface PhoneRoute {
   app: AppId | null
   businessId?: string
   convId?: string
+  warehouseId?: string
 }
 
 interface AppDef {
@@ -45,13 +48,13 @@ const APPS: Record<AppId, AppDef> = {
   avenir: { id: 'avenir', name: 'À venir', icon: 'lock', color: '#b08f80' },
   fournisseurs: { id: 'fournisseurs', name: 'Fournisseurs', icon: 'box', color: '#5c8de8', minRank: SUPPLIERS_RANK },
   siege: { id: 'siege', name: 'Siège', icon: 'tower', color: '#3d4f7c', minRank: HQ_RANK },
+  logistique: { id: 'logistique', name: 'Logistique', icon: 'truck', color: '#6b7280', minRank: WAREHOUSE_RANK },
 }
-const GRID: AppId[] = ['objectifs', 'siege', 'fournisseurs', 'compta', 'recrut', 'actus', 'reglages']
+const GRID: AppId[] = ['objectifs', 'siege', 'fournisseurs', 'logistique', 'compta', 'recrut', 'actus', 'reglages']
 const DOCK: AppId[] = ['messages', 'commerces', 'banque']
 /** Applis des prochaines mises à jour, affichées verrouillées pour montrer la progression. */
 const LOCKED: { name: string; icon: IconName; rank: number; text: string }[] = [
   { name: 'Immo', icon: 'key', rank: 4, text: 'Achetez les murs de vos boutiques au lieu de payer un loyer, et louez des locaux à d\'autres.' },
-  { name: 'Logistique', icon: 'truck', rank: 4, text: 'Entrepôts et livraisons pour approvisionner plusieurs boutiques à moindre coût.' },
   { name: 'Bourse', icon: 'trendUp', rank: 5, text: 'Investissez, rachetez des concurrents ou faites entrer votre groupe en bourse.' },
 ]
 
@@ -62,6 +65,7 @@ export function phoneBadges(state: GameState): Partial<Record<AppId, number>> {
     messages: state.inbox.filter(needsAttention).length,
     commerces: state.businesses.filter((b) => businessAlerts(b).length > 0).length,
     fournisseurs: state.orders.filter((o) => o.delayed).length,
+    logistique: state.warehouses.filter((w) => (w.history.at(-1)?.unserved ?? 0) > 0).length,
   }
 }
 
@@ -109,6 +113,7 @@ export function Phone({
   const back = () => {
     if (route.app === 'commerces' && route.businessId) setRoute({ app: 'commerces' })
     else if (route.app === 'messages' && route.convId) setRoute({ app: 'messages' })
+    else if (route.app === 'logistique' && route.warehouseId) setRoute({ app: 'logistique' })
     else setRoute({ app: null })
   }
 
@@ -141,6 +146,17 @@ export function Phone({
       break
     case 'objectifs':
       content = <ObjectivesApp state={state} />
+      break
+    case 'logistique':
+      content = (
+        <LogisticsApp
+          state={state}
+          act={act}
+          warehouseId={route.warehouseId ?? null}
+          onOpen={(id) => setRoute({ app: 'logistique', warehouseId: id ?? undefined })}
+          onFindLot={() => close(onFindLot)}
+        />
+      )
       break
     case 'siege':
       content = <HqApp state={state} act={act} onFindLot={() => close(onFindLot)} />

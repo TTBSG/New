@@ -40,7 +40,7 @@ export function setNetWorth(fn: (s: GameState) => number) {
 export const RANKS: RankDef[] = [
   { rank: 1, title: 'Premiers pas', unlockSectors: ['restaurant', 'vetements'], unlockApps: ['Fournisseurs'], prime: 3000 },
   { rank: 2, title: 'Boutique de quartier', unlockSectors: ['electronique'], unlockApps: ['Siège'], prime: 8000 },
-  { rank: 3, title: 'Petite enseigne', unlockSectors: [], unlockApps: [], prime: 15000 },
+  { rank: 3, title: 'Petite enseigne', unlockSectors: [], unlockApps: ['Logistique'], prime: 15000 },
   { rank: 4, title: 'Réseau local', unlockSectors: [], unlockApps: [], prime: 30000 },
   { rank: 5, title: 'Empire', unlockSectors: [], unlockApps: [], prime: 0 },
 ]
@@ -124,6 +124,7 @@ export function checkObjectives(s: GameState): string[][] {
           r.prime ? `Une prime de ${eur(r.prime)} vous est versée.` : '',
           unlocked.length ? `Vous pouvez désormais ouvrir : ${unlocked.join(', ')}.` : '',
           r.unlockApps.includes('Fournisseurs') ? 'Nouvelle appli sur votre téléphone : Fournisseurs. Choisissez vos fournisseurs, comparez qualité, prix et délais, et passez vos propres commandes.' : '',
+          r.unlockApps.includes('Logistique') ? 'Nouvelle appli : Logistique. Avec un directeur logistique au siège, ouvrez des entrepôts dans la zone commerciale pour acheter en gros et livrer vos boutiques chaque nuit.' : '',
           r.unlockApps.includes('Siège') ? 'Vous pouvez désormais installer votre siège social sur un local libre : il permet de dépasser 3 commerces et d\'embaucher des employés de bureau. Tout se gère dans la nouvelle appli Siège.' : '',
           'Vos nouveaux objectifs sont dans l\'appli Objectifs.',
         ]

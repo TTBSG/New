@@ -4,14 +4,15 @@ import { generateCity, getParcel, isFree, parcelRent, parcelTraffic } from './ci
 import { canDelegate, loanRateCut, marketingBoost, maxBusinesses, payHq, recruitingBoost, refreshOfficeCandidates, startingReputation } from './hq'
 import { FIRST_NAMES, LAST_NAMES, RANDOM_EVENTS, SECTORS, getSector } from './sectors'
 import { addBatch, productDef, stockOf, takeStock } from './stock'
-import { SUPPLIERS_RANK, canNegotiate, closeDay, dailySupply, defaultSupplier, getSupplier, tryNegotiate, generateSuppliers, productQuality, receiveDeliveries, sectorSuppliers, unitCost } from './supply'
+import { warehouseDay } from './warehouse'
+import { SUPPLIERS_RANK, canNegotiate, closeDay, costOf, dailySupply, defaultSupplier, getSupplier, tryNegotiate, generateSuppliers, productQuality, receiveDeliveries, sectorSuppliers, unitCost } from './supply'
 import type { Business, Candidate, DayReport, Employee, GameState, ProductState } from './types'
 import { clamp, log, newId, pick, rand, randRange, round2, update } from './util'
 
 export { rand }
 export { fairSalary, unitCost }
 
-export const SAVE_VERSION = 6
+export const SAVE_VERSION = 7
 export const START_CASH = 60000
 const HISTORY_DAYS = 120
 const BANKRUPTCY_DAYS = 30
@@ -116,6 +117,7 @@ export function newGame(seed = Date.now() % 2147483647): GameState {
     city: { size: 0, roads: [], parcels: [] },
     hq: null,
     officeCandidates: [],
+    warehouses: [],
     suppliers: [],
     orders: [],
     orderHistory: [],
@@ -213,7 +215,7 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
     unitsSold += sold
     lostToStockout += Math.max(0, want - sold)
     revenue += sold * p.price
-    grossMargin += sold * (p.price - unitCost(s, b.sectorId, p))
+    grossMargin += sold * (p.price - costOf(s, b.sectorId, p))
     qualitySum += productQuality(s, p) * demands[i]
     priceRatioSum += (p.price / perceivedPrice(s, b.sectorId, p)) * demands[i]
   })
@@ -363,6 +365,7 @@ export function tick(state: GameState): GameState {
     s.day++
     updateMarket(s)
     for (const b of s.businesses) simulateBusiness(s, b)
+    for (const w of s.warehouses) warehouseDay(s, w)
 
     payHq(s)
     delegatePurchasing(s)
@@ -421,6 +424,7 @@ export function openBusiness(state: GameState, sectorId: string, parcelId: strin
       const c = p.restockTarget * unitCost(s, sectorId, p)
       if (s.cash >= c) {
         s.cash -= c
+        p.avgCost = unitCost(s, sectorId, p)
         addBatch(sectorId, p, p.restockTarget, s.day)
       }
     }
@@ -595,6 +599,10 @@ export function migrate(raw: GameState): GameState | null {
         'Dès le rang 3, installez votre siège sur un local libre de la carte : il augmente cette limite et accueille des employés de bureau qui profitent à tous vos commerces.',
       ])
     s.version = 6
+  }
+  if (s.version === 6) {
+    s.warehouses = []
+    s.version = 7
   }
   return s.version === SAVE_VERSION ? s : null
 }
