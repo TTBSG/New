@@ -29,6 +29,7 @@ Ouvrez ensuite l'adresse affichée (par exemple http://localhost:5173) dans le n
 - **Sauvegarde** automatique, avec export et import d'un fichier depuis l'appli Réglages.
 - **Fournisseurs** (appli débloquée au rang 2) : 4 fournisseurs par secteur (standard, premium, économique, gros volume) avec qualité, prix, délai de livraison, fiabilité et minimum de commande. Commandes automatiques ou manuelles, paiement à la livraison, retards possibles, remises sur volume, fidélité et négociation, faillites de fournisseurs.
 - **Produits frais** : les produits qui périment sont jetés s'ils ne sont pas vendus à temps (pertes comptées dans le résultat) ; les commandes automatiques s'ajustent sur les ventes récentes pour limiter le gaspillage.
+- **Siège social** (rang 3) : sans siège, 3 commerces au maximum. Le siège (petit bureau, plateau, tour) relève cette limite et accueille des employés de bureau aux effets sur tout le groupe (acheteur, recruteur, marketing, logistique, contrôle de gestion), ainsi que des règles de délégation optionnelles.
 - **6 secteurs** : café, boulangerie, restaurant, boutique de vêtements, magasin d'électronique et supérette.
 - **Produits** : prix de vente, fournisseur (Économique, Standard ou Premium, qui changent la qualité et le coût) et stock cible avec réapprovisionnement automatique.
 - **Équipe** : recrutement de candidats renouvelés chaque lundi, compétence, moral, salaires, licenciements avec indemnité, managers et démissions.
@@ -47,6 +48,7 @@ Ouvrez ensuite l'adresse affichée (par exemple http://localhost:5173) dans le n
 | `src/game/diagnose.ts` | Diagnostic d'un commerce. |
 | `src/game/supply.ts` | Fournisseurs, commandes, livraisons, remises et négociation. |
 | `src/game/stock.ts` | Stocks en lots avec date de péremption. |
+| `src/game/hq.ts` | Siège social, employés de bureau et délégation. |
 | `src/game/engine.ts` | Moteur de simulation (journée, clients, stocks, employés, banque). |
 | `src/game/engine.test.ts` | Tests automatiques du moteur (`npm test`). |
 | `src/ui/` | Écrans de l'application. |

@@ -10,11 +10,13 @@ import { CommercesApp, ComptaApp, RecrutApp, SettingsApp, businessAlerts } from 
 import { Avatar, MessagesApp, needsAttention } from './MessagesApp'
 import { ObjectivesApp } from './ObjectivesApp'
 import { SuppliersApp } from './SuppliersApp'
+import { HqApp } from './HqApp'
+import { HQ_RANK } from '../../game/hq'
 import { SUPPLIERS_RANK } from '../../game/supply'
 import { activeObjectives, currentRank, rankTitle } from '../../game/objectives'
 import { Meter } from '../common'
 
-export type AppId = 'messages' | 'commerces' | 'banque' | 'compta' | 'recrut' | 'actus' | 'reglages' | 'objectifs' | 'avenir' | 'fournisseurs'
+export type AppId = 'messages' | 'commerces' | 'banque' | 'compta' | 'recrut' | 'actus' | 'reglages' | 'objectifs' | 'avenir' | 'fournisseurs' | 'siege'
 
 export interface PhoneRoute {
   app: AppId | null
@@ -42,8 +44,9 @@ const APPS: Record<AppId, AppDef> = {
   objectifs: { id: 'objectifs', name: 'Objectifs', icon: 'trophy', color: '#e0a21b' },
   avenir: { id: 'avenir', name: 'À venir', icon: 'lock', color: '#b08f80' },
   fournisseurs: { id: 'fournisseurs', name: 'Fournisseurs', icon: 'box', color: '#5c8de8', minRank: SUPPLIERS_RANK },
+  siege: { id: 'siege', name: 'Siège', icon: 'tower', color: '#3d4f7c', minRank: HQ_RANK },
 }
-const GRID: AppId[] = ['objectifs', 'fournisseurs', 'compta', 'recrut', 'actus', 'reglages']
+const GRID: AppId[] = ['objectifs', 'siege', 'fournisseurs', 'compta', 'recrut', 'actus', 'reglages']
 const DOCK: AppId[] = ['messages', 'commerces', 'banque']
 /** Applis des prochaines mises à jour, affichées verrouillées pour montrer la progression. */
 const LOCKED: { name: string; icon: IconName; rank: number; text: string }[] = [
@@ -138,6 +141,9 @@ export function Phone({
       break
     case 'objectifs':
       content = <ObjectivesApp state={state} />
+      break
+    case 'siege':
+      content = <HqApp state={state} act={act} onFindLot={() => close(onFindLot)} />
       break
     case 'fournisseurs':
       content = <SuppliersApp state={state} act={act} />

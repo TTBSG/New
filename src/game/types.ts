@@ -248,6 +248,37 @@ export interface Conversation {
   lastDay: number
 }
 
+export type OfficeRole = 'acheteur' | 'recruteur' | 'marketing' | 'logisticien' | 'comptable'
+
+export interface OfficeEmployee {
+  id: string
+  name: string
+  role: OfficeRole
+  skill: number
+  salary: number
+  hiredDay: number
+}
+
+/** Règles de délégation : ce que le siège gère à la place du joueur. */
+export interface HqPolicies {
+  /** Remplacer automatiquement un employé qui démissionne (recruteur). */
+  autoReplace: boolean
+  /** Accepter sans demander les augmentations jusqu'à ce pourcentage (0 = toujours demander ; recruteur). */
+  raiseLimit: number
+  /** Négocier chaque mois avec les fournisseurs utilisés (acheteur). */
+  autoNegotiate: boolean
+  /** Ajuster chaque semaine les stocks cibles des produits qui ne périment pas (acheteur). */
+  autoStock: boolean
+}
+
+export interface Headquarters {
+  parcelId: string
+  level: number
+  staff: OfficeEmployee[]
+  policies: HqPolicies
+  openedDay: number
+}
+
 /** Célébration à afficher (objectif atteint, nouveau rang). */
 export interface Celebration {
   id: string
@@ -271,6 +302,8 @@ export interface GameState {
   sectorTrends: Record<SectorId, number>
   events: MarketEvent[]
   city: City
+  hq: Headquarters | null
+  officeCandidates: OfficeEmployee[]
   suppliers: Supplier[]
   orders: Order[]
   orderHistory: OrderRecord[]

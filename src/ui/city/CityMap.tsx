@@ -62,12 +62,12 @@ const Ground = memo(function Ground({ city, overlay }: { city: City; overlay: Ov
   return <g>{tiles}</g>
 })
 
-const Objects = memo(function Objects({ city, shops, faded }: { city: City; shops: Record<string, string>; faded: boolean }) {
+const Objects = memo(function Objects({ city, shops, hq, faded }: { city: City; shops: Record<string, string>; hq: { parcelId: string; height: number } | null; faded: boolean }) {
   const sorted = useMemo(() => [...city.parcels].sort((a, b) => a.i + a.j - (b.i + b.j) || a.i - b.i), [city])
   return (
     <g className={faded ? 'faded' : undefined}>
       {sorted.map((p) => (
-        <ParcelObject key={p.id} parcel={p} shopSectorId={shops[p.id]} />
+        <ParcelObject key={p.id} parcel={p} shopSectorId={shops[p.id]} hqHeight={hq?.parcelId === p.id ? hq.height : undefined} />
       ))}
     </g>
   )
@@ -111,12 +111,14 @@ const DISTRICT_LABELS: [number, number, string][] = [
 export function CityMap({
   city,
   businesses,
+  hq,
   selectedId,
   overlay,
   onSelect,
 }: {
   city: City
   businesses: Business[]
+  hq: { parcelId: string; height: number } | null
   selectedId: string | null
   overlay: Overlay
   onSelect: (parcelId: string | null) => void
@@ -248,7 +250,7 @@ export function CityMap({
           <g transform={`translate(${view.x.toFixed(1)} ${view.y.toFixed(1)}) scale(${view.k.toFixed(3)})`}>
             <Ground city={city} overlay={overlay} />
             {selected && <polygon points={diamond(selected.i, selected.j, 0.04)} fill="none" stroke="#e8743b" strokeWidth={3} className="sel-ring" />}
-            <Objects city={city} shops={shops} faded={overlay !== 'none'} />
+            <Objects city={city} shops={shops} hq={hq} faded={overlay !== 'none'} />
             {DISTRICT_LABELS.map(([a, b, t]) => {
               const [x, y] = P(a, b)
               return (
@@ -285,7 +287,20 @@ export function CityMap({
                 </g>
               )
             })}
-            {selected && !shops[selected.id] && (
+            {hq &&
+              (() => {
+                const p = parcelsById[hq.parcelId]
+                const [x, y] = P(p.i + 0.5, p.j + 0.5, hq.height + 40)
+                return (
+                  <g data-parcel={p.id} transform={`translate(${x} ${y})`}>
+                    <g className={selectedId === p.id ? 'pin-bounce' : undefined}>
+                      <path d="M0 0 C-14 -16 -14 -34 0 -34 C14 -34 14 -16 0 0Z" fill="#3d4f7c" stroke="#fff" strokeWidth={2.5} />
+                      <Icon name="tower" size={16} x={-8} y={-29} color="#fff" strokeWidth={2.2} />
+                    </g>
+                  </g>
+                )
+              })()}
+            {selected && !shops[selected.id] && selected.id !== hq?.parcelId && (
               <g transform={`translate(${P(selected.i + 0.5, selected.j + 0.5)[0]} ${P(selected.i + 0.5, selected.j + 0.5)[1] - 44})`} pointerEvents="none">
                 <g className="pin-bounce">
                   <path d="M-9 -12 L0 0 L9 -12Z" fill="#e8743b" stroke="#fff" strokeWidth={2} />

@@ -124,6 +124,7 @@ export default function App() {
         state={state}
         act={act}
         onManage={(businessId) => openPhone({ app: 'commerces', businessId })}
+        onHq={() => openPhone({ app: 'siege' })}
         onSheetChange={setCitySheetOpen}
       />
 

@@ -111,8 +111,20 @@ function Tree({ a, b }: { a: number; b: number }) {
 
 // ---------- Contenu d'une parcelle ----------
 
-export const ParcelObject = memo(function ParcelObject({ parcel, shopSectorId }: { parcel: Parcel; shopSectorId?: string }) {
+export const ParcelObject = memo(function ParcelObject({ parcel, shopSectorId, hqHeight }: { parcel: Parcel; shopSectorId?: string; hqHeight?: number }) {
   const { i, j, districtId, kind, height, variant } = parcel
+
+  if (hqHeight) {
+    // Siège social : tour vitrée surmontée d'un drapeau aux couleurs du groupe.
+    const [x, y] = P(i + 0.5, j + 0.5, hqHeight)
+    return (
+      <g data-parcel={parcel.id}>
+        <Box i={i} j={j} h={hqHeight} color="#5f79b8" inset={0.16} roof="#3d4f7c" floors={Math.round(hqHeight / 10)} />
+        <rect x={x - 1} y={y - 30} width={2} height={30} fill="#3b2f2a" />
+        <path d={`M${x + 1},${y - 30} l16,5 l-16,5z`} fill="#e8743b" />
+      </g>
+    )
+  }
 
   if (shopSectorId) {
     const sector = getSector(shopSectorId)

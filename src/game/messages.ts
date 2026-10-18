@@ -1,4 +1,6 @@
 import { getParcel, parcelRent } from './city'
+import { HQ_RANK, SHOPS_WITHOUT_HQ, canDelegate } from './hq'
+import { currentRank } from './objectives'
 import { getSector } from './sectors'
 import { addBatch } from './stock'
 import type { Business, Choice, Conversation, ConversationKind, Employee, GameState } from './types'
@@ -115,6 +117,14 @@ function maybeRaiseRequest(s: GameState, b: Business) {
     if (e.salary >= fair * 0.98 || rand(s) > 0.025) continue
     const asked = roundTo(fair * 1.06, 10)
     const counter = roundTo(fair, 10)
+    // Délégation : le recruteur du siège accepte les demandes raisonnables sans vous déranger.
+    const limit = s.hq?.policies.raiseLimit ?? 0
+    if (limit > 0 && canDelegate(s, 'recruteur') && asked <= e.salary * (1 + limit)) {
+      log(s, `Le siège a accordé une augmentation à ${e.name} (${eur(e.salary)} → ${eur(asked)}).`)
+      e.salary = asked
+      e.morale = clamp(e.morale + 25, 0, 100)
+      return
+    }
     const rival = pick(s, ['La concurrence', 'Une boutique du centre-ville', 'Un ancien collègue', 'Une enseigne du quartier'])
     send(
       s,
@@ -223,6 +233,13 @@ function maybePress(s: GameState) {
 
 /** Appelé chaque jour après la simulation des commerces. */
 export function dailyMessages(s: GameState) {
+  if (!s.hq && s.businesses.length >= SHOPS_WITHOUT_HQ)
+    advise(s, 'hq_hint', [
+      `Vous gérez maintenant ${SHOPS_WITHOUT_HQ} commerces : c'est le maximum sans siège social.`,
+      currentRank(s) >= HQ_RANK
+        ? "Installez votre siège sur un local libre de la carte (bouton « Installer le siège ici ») pour continuer à grandir."
+        : `Le siège social se débloque au rang ${HQ_RANK}. Continuez à remplir vos objectifs !`,
+    ])
   for (const b of s.businesses) {
     adviceFor(s, b)
     maybeRaiseRequest(s, b)

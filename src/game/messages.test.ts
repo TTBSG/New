@@ -81,7 +81,7 @@ describe('messages', () => {
         delete p.auto
       }
     const migrated = migrate(old as unknown as GameState)!
-    expect(migrated.version).toBe(5)
+    expect(migrated.version).toBe(6)
     expect(migrated.inbox).toHaveLength(2)
     expect(migrated.objectivesDone).toContain('open_first')
     expect(migrated.businesses[0].rentMult).toBe(1)

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { purchasingRate } from '../../game/hq'
 import { getSector } from '../../game/sectors'
 import { productDef, stockOf } from '../../game/stock'
 import {
@@ -193,7 +194,7 @@ function NewOrderTab({ state, act, b, onDone }: { state: GameState; act: Act; b:
   const [qty, setQty] = useState<Record<string, number>>({})
   const supplier = suppliers.find((x) => x.id === supplierId) ?? suppliers[0]
   const lines = b.products.map((p) => ({ productId: p.id, qty: qty[p.id] ?? 0 }))
-  const q = quote(supplier, b.sectorId, lines)
+  const q = quote(supplier, b.sectorId, lines, purchasingRate(state))
   const affordable = state.cash >= q.total
 
   return (
@@ -238,7 +239,7 @@ function NewOrderTab({ state, act, b, onDone }: { state: GameState; act: Act; b:
             </tr>
             {q.discountRate > 0 && (
               <tr>
-                <td>Remises (volume, fidélité, négociation)</td>
+                <td>Remises (volume, fidélité, négociation, acheteurs)</td>
                 <td className="num good">−{eur(q.discount)}</td>
               </tr>
             )}

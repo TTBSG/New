@@ -1,5 +1,5 @@
 import { getDistrict } from './sectors'
-import type { Business, City, Parcel, ParcelKind } from './types'
+import type { Business, City, GameState, Parcel, ParcelKind } from './types'
 
 export const CITY_SIZE = 13
 /** Rues : lignes et colonnes 2, 6 et 10. La 6 est l'axe principal qui sépare les quartiers. */
@@ -82,4 +82,9 @@ export function parcelRent(p: Parcel): number {
 
 export function isVacant(p: Parcel, businesses: Business[]): boolean {
   return p.kind === 'lot' && !businesses.some((b) => b.parcelId === p.id)
+}
+
+/** Local libre : ni commerce, ni siège social, ni entrepôt dessus. */
+export function isFree(s: GameState, p: Parcel): boolean {
+  return isVacant(p, s.businesses) && s.hq?.parcelId !== p.id
 }

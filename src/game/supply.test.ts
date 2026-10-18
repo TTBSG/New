@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { isVacant } from './city'
-import { hire, newGame, openBusiness, setRestockTarget, tick } from './engine'
+import { hire, newGame, openBusiness, tick } from './engine'
 import { stockOf } from './stock'
 import { cancelOrder, getSupplier, negotiate, placeOrder, quote, sectorSuppliers, setAuto, setProductSupplier } from './supply'
 import type { GameState } from './types'
@@ -29,8 +29,10 @@ describe('fournisseurs', () => {
 
   it('les produits frais invendus sont jetés et comptés en pertes', () => {
     let s = cafe()
-    s = setRestockTarget(s, s.businesses[0].id, 'croissant', 400)
-    for (let i = 0; i < 4; i++) s = tick(s)
+    // Une grosse commande manuelle de croissants : bien plus que ce qui se vend en une journée.
+    s = setAuto(s, s.businesses[0].id, 'croissant', false)
+    s = placeOrder(s, s.businesses[0].id, sectorSuppliers(s, 'cafe').find((x) => x.tier === 'default')!.id, { croissant: 400 })
+    for (let i = 0; i < 3; i++) s = tick(s)
     const waste = s.businesses[0].history.reduce((a, r) => a + (r.wasteByProduct?.croissant ?? 0), 0)
     expect(waste).toBeGreaterThan(100)
     expect(s.businesses[0].history.at(-1)!.waste).toBeGreaterThan(0)

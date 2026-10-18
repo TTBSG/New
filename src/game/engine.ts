@@ -1,16 +1,17 @@
 import { advisorMessage, dailyMessages, fairSalary, welcomeMessage } from './messages'
 import { STARTING_SECTORS, checkObjectives, currentRank, isSectorUnlocked, setNetWorth } from './objectives'
-import { generateCity, getParcel, parcelRent, parcelTraffic, isVacant } from './city'
+import { generateCity, getParcel, isFree, parcelRent, parcelTraffic } from './city'
+import { canDelegate, loanRateCut, marketingBoost, maxBusinesses, payHq, recruitingBoost, refreshOfficeCandidates, startingReputation } from './hq'
 import { FIRST_NAMES, LAST_NAMES, RANDOM_EVENTS, SECTORS, getSector } from './sectors'
 import { addBatch, productDef, stockOf, takeStock } from './stock'
-import { SUPPLIERS_RANK, closeDay, dailySupply, defaultSupplier, generateSuppliers, productQuality, receiveDeliveries, sectorSuppliers, unitCost } from './supply'
+import { SUPPLIERS_RANK, canNegotiate, closeDay, dailySupply, defaultSupplier, getSupplier, tryNegotiate, generateSuppliers, productQuality, receiveDeliveries, sectorSuppliers, unitCost } from './supply'
 import type { Business, Candidate, DayReport, Employee, GameState, ProductState } from './types'
 import { clamp, log, newId, pick, rand, randRange, round2, update } from './util'
 
 export { rand }
 export { fairSalary, unitCost }
 
-export const SAVE_VERSION = 5
+export const SAVE_VERSION = 6
 export const START_CASH = 60000
 const HISTORY_DAYS = 120
 const BANKRUPTCY_DAYS = 30
@@ -83,6 +84,11 @@ function progress(s: GameState) {
   for (const lines of checkObjectives(s)) advisorMessage(s, lines)
 }
 
+/** Taux d'emprunt après l'effet des contrôleurs de gestion du siège. */
+export function effectiveLoanRate(s: GameState): number {
+  return Math.max(0.01, s.loanRate - loanRateCut(s))
+}
+
 export function maxLoan(s: GameState): number {
   return Math.round(40000 + s.businesses.reduce((sum, b) => sum + businessValue(b) * 0.6, 0))
 }
@@ -108,6 +114,8 @@ export function newGame(seed = Date.now() % 2147483647): GameState {
     sectorTrends: Object.fromEntries(SECTORS.map((x) => [x.id, 1])),
     events: [],
     city: { size: 0, roads: [], parcels: [] },
+    hq: null,
+    officeCandidates: [],
     suppliers: [],
     orders: [],
     orderHistory: [],
@@ -132,7 +140,7 @@ export function newGame(seed = Date.now() % 2147483647): GameState {
 
 function makeCandidate(s: GameState, sectorId: string, roleId: string): Candidate {
   const role = getSector(sectorId).roles.find((r) => r.id === roleId)!
-  const skill = Math.round(randRange(s, 15, 92))
+  const skill = Math.min(100, Math.round(randRange(s, 15, 92)) + recruitingBoost(s))
   const salary = Math.round((fairSalary(role.baseSalary, skill) * randRange(s, 0.95, 1.05)) / 10) * 10
   return {
     id: newId(s, 'c'),
@@ -152,6 +160,7 @@ function refreshCandidates(s: GameState) {
       for (let i = 0; i < count; i++) s.candidates.push(makeCandidate(s, sector.id, role.id))
     }
   }
+  refreshOfficeCandidates(s)
 }
 
 // ---------- Simulation d'une journée ----------
@@ -174,6 +183,7 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
       (s.sectorTrends[b.sectorId] ?? 1) *
       eventMult *
       marketingFactor *
+      (1 + marketingBoost(s)) *
       reputationFactor *
       randRange(s, 0.9, 1.1),
   )
@@ -237,6 +247,7 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
   // Évolution des employés.
   const load = capacity > 0 ? totalDemand / capacity : 0
   const hasManager = b.employees.some((e) => sector.roles.find((r) => r.id === e.roleId)!.capacity === 0)
+  const quits: Employee[] = []
   b.employees = b.employees.filter((e) => {
     const role = sector.roles.find((r) => r.id === e.roleId)!
     e.skill = Math.min(100, e.skill + 0.04)
@@ -248,10 +259,12 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
     e.morale = clamp(e.morale + (moraleTarget - e.morale) * 0.05, 0, 100)
     if (e.morale < 20 && rand(s) < 0.015) {
       log(s, `${e.name} a démissionné de ${b.name} (moral trop bas).`, 'bad')
+      quits.push(e)
       return false
     }
     return true
   })
+  for (const e of quits) autoReplace(s, b, e)
 
   const report: DayReport = {
     day: s.day,
@@ -277,6 +290,42 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
   b.history.push(report)
   if (b.history.length > HISTORY_DAYS) b.history.splice(0, b.history.length - HISTORY_DAYS)
   return report
+}
+
+/** Délégation : le recruteur du siège remplace un employé parti par le meilleur candidat au prix du marché. */
+function autoReplace(s: GameState, b: Business, gone: Employee) {
+  if (!s.hq?.policies.autoReplace || !canDelegate(s, 'recruteur')) return
+  const role = getSector(b.sectorId).roles.find((r) => r.id === gone.roleId)!
+  const c = s.candidates
+    .filter((x) => x.sectorId === b.sectorId && x.roleId === gone.roleId && x.salary <= fairSalary(role.baseSalary, x.skill) * 1.05)
+    .sort((x, y) => y.skill - x.skill)[0]
+  if (!c) return
+  s.candidates = s.candidates.filter((x) => x.id !== c.id)
+  b.employees.push({ id: c.id, name: c.name, roleId: c.roleId, skill: c.skill, salary: c.salary, morale: 65, hiredDay: s.day })
+  log(s, `Le siège a recruté ${c.name} pour remplacer ${gone.name} chez ${b.name}.`)
+}
+
+/** Délégation des achats : négociation mensuelle et ajustement hebdomadaire des stocks cibles. */
+function delegatePurchasing(s: GameState) {
+  if (!s.hq || !canDelegate(s, 'acheteur')) return
+  if (s.hq.policies.autoNegotiate && s.day % 30 === 0) {
+    const used = new Set(s.businesses.flatMap((b) => b.products.map((p) => p.supplierId)))
+    for (const id of used) {
+      const x = getSupplier(s, id)
+      if (canNegotiate(s, x) && tryNegotiate(s, x)) log(s, `Votre acheteur a obtenu −${Math.round(x.negotiated * 100)} % chez ${x.name}.`, 'good')
+    }
+  }
+  if (s.hq.policies.autoStock && weekday(s.day) === 0) {
+    for (const b of s.businesses) {
+      if (b.history.length < 7) continue
+      for (const p of b.products) {
+        const def = productDef(b.sectorId, p.id)
+        if (!p.auto || def.shelfLife !== undefined) continue
+        const avg = b.history.slice(-7).reduce((a, r) => a + (r.soldByProduct?.[p.id] ?? 0), 0) / 7
+        if (avg > 0) p.restockTarget = Math.max(1, Math.ceil(avg * (getSupplier(s, p.supplierId).leadDays + 2)))
+      }
+    }
+  }
 }
 
 function updateMarket(s: GameState) {
@@ -315,7 +364,9 @@ export function tick(state: GameState): GameState {
     updateMarket(s)
     for (const b of s.businesses) simulateBusiness(s, b)
 
-    if (s.loan > 0) s.cash -= (s.loan * s.loanRate) / 365
+    payHq(s)
+    delegatePurchasing(s)
+    if (s.loan > 0) s.cash -= (s.loan * effectiveLoanRate(s)) / 365
     if (weekday(s.day) === 0) refreshCandidates(s)
 
     if (s.cash < 0) {
@@ -338,7 +389,7 @@ export function tick(state: GameState): GameState {
 
 export function openBusiness(state: GameState, sectorId: string, parcelId: string, name: string): GameState {
   const parcel = state.city.parcels.find((p) => p.id === parcelId)
-  if (!parcel || !isVacant(parcel, state.businesses) || !isSectorUnlocked(state, sectorId)) return state
+  if (!parcel || !isFree(state, parcel) || !isSectorUnlocked(state, sectorId) || state.businesses.length >= maxBusinesses(state)) return state
   const cost = openingCost(state, sectorId, parcelId)
   if (state.cash < cost) return state
   return update(state, (s) => {
@@ -353,7 +404,7 @@ export function openBusiness(state: GameState, sectorId: string, parcelId: strin
       openedDay: s.day,
       employees: [],
       marketingDaily: 0,
-      reputation: 50,
+      reputation: startingReputation(s),
       rentMult: 1,
       history: [],
       products: sector.products.map((p) => ({
@@ -534,6 +585,16 @@ export function migrate(raw: GameState): GameState | null {
         : "L'appli Fournisseurs se débloque au rang 2. En attendant, le Grossiste du Coin vous livre chaque matin.",
     ])
     s.version = 5
+  }
+  if (s.version === 5) {
+    s.hq = null
+    refreshOfficeCandidates(s)
+    if (s.businesses.length >= 3)
+      advisorMessage(s, [
+        'Nouveau : le siège social ! Sans siège, un groupe peut gérer 3 commerces au maximum.',
+        'Dès le rang 3, installez votre siège sur un local libre de la carte : il augmente cette limite et accueille des employés de bureau qui profitent à tous vos commerces.',
+      ])
+    s.version = 6
   }
   return s.version === SAVE_VERSION ? s : null
 }

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
-import { getParcel, isVacant, parcelRent, parcelTraffic } from '../game/city'
+import { useEffect, useMemo, useState } from 'react'
+import { getParcel, isFree, parcelRent, parcelTraffic } from '../game/city'
+import { HQ_LEVELS, HQ_RANK, hqLevel, hqOpeningCost, hqUnlocked, maxBusinesses, openHq } from '../game/hq'
 import { openBusiness, openingCost, serviceCapacity } from '../game/engine'
 import { isSectorUnlocked, sectorUnlockRank } from '../game/objectives'
 import { SECTORS, getDistrict, getSector } from '../game/sectors'
@@ -19,11 +20,13 @@ export function CityView({
   state,
   act,
   onManage,
+  onHq,
   onSheetChange,
 }: {
   state: GameState
   act: Act
   onManage: (businessId: string) => void
+  onHq: () => void
   onSheetChange: (open: boolean) => void
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -34,13 +37,20 @@ export function CityView({
 
   const parcel = selectedId ? getParcel(state.city, selectedId) : null
   const business = parcel ? state.businesses.find((b) => b.parcelId === parcel.id) : undefined
-  const vacant = parcel ? isVacant(parcel, state.businesses) : false
+  const vacant = parcel ? parcel.kind === 'lot' && isFree(state, parcel) : false
+  const isHq = !!parcel && state.hq?.parcelId === parcel.id
+  const hqParcelId = state.hq?.parcelId
+  const hqHeight = state.hq ? hqLevel(state.hq).height : 0
+  // Objet stable tant que le siège ne change pas, pour ne pas redessiner toute la ville.
+  const hqOnMap = useMemo(() => (hqParcelId ? { parcelId: hqParcelId, height: hqHeight } : null), [hqParcelId, hqHeight])
+  const atLimit = state.businesses.length >= maxBusinesses(state)
 
   return (
     <div className="cityview">
       <CityMap
         city={state.city}
         businesses={state.businesses}
+        hq={hqOnMap}
         selectedId={selectedId}
         overlay={overlay}
         onSelect={(id) => {
@@ -137,8 +147,69 @@ export function CityView({
                   <small>loyer/mois</small>
                 </div>
               </div>
-              <button className="btn primary block" onClick={() => setPicking(true)}>
-                Ouvrir un commerce ici
+              {atLimit ? (
+                <p className="small warn">
+                  Vous gérez déjà {state.businesses.length} commerces, le maximum{' '}
+                  {state.hq ? 'pour votre siège actuel : agrandissez-le dans l\'appli Siège.' : `sans siège social${hqUnlocked(state) ? '.' : ` (débloqué au rang ${HQ_RANK}).`}`}
+                </p>
+              ) : (
+                <button className="btn primary block" onClick={() => setPicking(true)}>
+                  Ouvrir un commerce ici
+                </button>
+              )}
+              {!state.hq && hqUnlocked(state) && (
+                <button
+                  className="btn block hq-btn"
+                  disabled={state.cash < hqOpeningCost(state, parcel.id)}
+                  onClick={() => {
+                    if (confirm(`Installer votre siège social ici pour ${eur(hqOpeningCost(state, parcel.id))} (aménagement + caution) ? Loyer : ${eur(parcelRent(parcel))}/mois.`)) {
+                      act(openHq, parcel.id)
+                      setSelectedId(null)
+                      onHq()
+                    }
+                  }}
+                >
+                  <Icon name="tower" size={18} /> Installer le siège ici · {eur(hqOpeningCost(state, parcel.id))}
+                </button>
+              )}
+            </>
+          )}
+
+          {isHq && state.hq && (
+            <>
+              <div className="sheet-title">
+                <span className="sector-badge" style={{ background: '#3d4f7c' }}>
+                  <Icon name="tower" size={20} />
+                </span>
+                <div>
+                  <h3>Siège social</h3>
+                  <span className="muted small">
+                    {hqLevel(state.hq).name} · {parcel.address}
+                  </span>
+                </div>
+              </div>
+              <div className="tiles">
+                <div className="tile">
+                  <strong>
+                    {state.businesses.length}/{maxBusinesses(state) === Infinity ? '∞' : maxBusinesses(state)}
+                  </strong>
+                  <small>commerces</small>
+                </div>
+                <div className="tile">
+                  <strong>
+                    {state.hq.staff.length}/{HQ_LEVELS[state.hq.level - 1].desks}
+                  </strong>
+                  <small>bureaux occupés</small>
+                </div>
+              </div>
+              <button
+                className="btn primary block"
+                onClick={() => {
+                  setSelectedId(null)
+                  onHq()
+                }}
+              >
+                Gérer le siège
               </button>
             </>
           )}
@@ -157,7 +228,7 @@ export function CityView({
             />
           )}
 
-          {!business && !vacant && (
+          {!business && !vacant && !isHq && (
             <>
               <div className="sheet-title">
                 <span className="sector-badge" style={{ background: '#9a9590' }}>

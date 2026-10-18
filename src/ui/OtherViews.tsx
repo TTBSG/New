@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { borrow, maxLoan, repay } from '../game/engine'
+import { borrow, effectiveLoanRate, maxLoan, repay } from '../game/engine'
 import { SECTORS, getSector } from '../game/sectors'
 import type { GameState } from '../game/types'
 import { Section, Stat } from './common'
@@ -14,8 +14,8 @@ export function BankView({ state, act }: { state: GameState; act: Act }) {
       <div className="stats">
         <Stat label="Dette" value={eur(state.loan)} tone={state.loan > 0 ? 'bad' : undefined} />
         <Stat label="Disponible" value={eur(available)} />
-        <Stat label="Taux annuel" value={`${(state.loanRate * 100).toFixed(1)} %`} />
-        <Stat label="Intérêts / mois" value={eur((state.loan * state.loanRate) / 12)} />
+        <Stat label="Taux annuel" value={`${(effectiveLoanRate(state) * 100).toFixed(1)} %`} hint={effectiveLoanRate(state) < state.loanRate ? 'réduit par votre contrôleur de gestion' : undefined} />
+        <Stat label="Intérêts / mois" value={eur((state.loan * effectiveLoanRate(state)) / 12)} />
       </div>
       <Section title="Emprunter">
         <p className="muted small">Votre plafond dépend de la valeur de vos entreprises.</p>

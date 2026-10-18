@@ -1,6 +1,7 @@
 import { getParcel } from '../../game/city'
 import { useRef, useState } from 'react'
 import { businessValue, hire, migrate, monthlyWages, netWorth, serviceCapacity } from '../../game/engine'
+import { hqMonthlyCost } from '../../game/hq'
 import { getSector } from '../../game/sectors'
 import type { Business, GameState } from '../../game/types'
 import { BarChart, Section, Stat } from '../common'
@@ -79,6 +80,11 @@ export function ComptaApp({ state }: { state: GameState }) {
         <Stat label="Dette" value={eur(state.loan)} />
         <Stat label="Salaires / mois" value={eur(wages)} />
       </div>
+      {state.hq && (
+        <p className="small muted">
+          Frais du siège : {eur(hqMonthlyCost(state))}/mois (loyer et salaires de bureau), non inclus dans le bénéfice des commerces ci-dessous.
+        </p>
+      )}
       {state.businesses.length > 0 && (
         <>
           <Section title="Bénéfice quotidien du groupe">

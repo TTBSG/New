@@ -1,3 +1,4 @@
+import { purchasingRate, reliabilityBoost } from './hq'
 import { supplierMessage } from './messages'
 import { currentRank } from './objectives'
 import { SECTORS, SUPPLIER_NAMES, getSector } from './sectors'
@@ -75,9 +76,10 @@ export interface Quote {
   total: number
 }
 
-export function quote(supplier: Supplier, sectorId: string, lines: OrderLine[]): Quote {
+/** `extraRate` : remise supplémentaire obtenue par les acheteurs du siège. */
+export function quote(supplier: Supplier, sectorId: string, lines: OrderLine[], extraRate = 0): Quote {
   const subtotal = lines.reduce((sum, l) => sum + l.qty * productDef(sectorId, l.productId).unitCost * supplier.priceMult, 0)
-  const discountRate = volumeRate(subtotal) + loyalty(supplier.spent).rate + supplier.negotiated
+  const discountRate = volumeRate(subtotal) + loyalty(supplier.spent).rate + supplier.negotiated + extraRate
   const discount = subtotal * discountRate
   const fee = subtotal > 0 && subtotal - discount < supplier.minOrder ? supplier.deliveryFee : 0
   return { subtotal: round2(subtotal), discountRate, discount: round2(discount), fee, total: round2(subtotal - discount + fee) }
@@ -95,7 +97,7 @@ export function incoming(s: GameState, businessId: string, productId: string): n
 function createOrder(s: GameState, b: Business, supplier: Supplier, lines: OrderLine[], auto: boolean): Order | null {
   lines = lines.filter((l) => l.qty > 0)
   if (!lines.length) return null
-  const q = quote(supplier, b.sectorId, lines)
+  const q = quote(supplier, b.sectorId, lines, purchasingRate(s))
   // Le fournisseur vérifie la solvabilité au moment de la commande ; le paiement a lieu à la livraison.
   if (s.cash < q.total) return null
   const order: Order = { id: newId(s, 'o'), businessId: b.id, supplierId: supplier.id, lines, total: q.total, placedDay: s.day, dueDay: s.day + supplier.leadDays, auto, delayed: false }
@@ -114,7 +116,7 @@ export function receiveDeliveries(s: GameState, b: Business): number {
   let paid = 0
   for (const o of pendingOrders(s, b.id).filter((x) => x.dueDay <= s.day)) {
     const supplier = getSupplier(s, o.supplierId)
-    if (!o.delayed && rand(s) > supplier.reliability) {
+    if (!o.delayed && rand(s) > Math.min(0.995, supplier.reliability + reliabilityBoost(s))) {
       const delay = 1 + Math.floor(rand(s) * 3)
       o.delayed = true
       o.dueDay += delay
@@ -216,7 +218,7 @@ export function placeOrder(state: GameState, businessId: string, supplierId: str
   const b = state.businesses.find((x) => x.id === businessId)
   if (!supplier || !b || !supplier.active || supplier.sectorId !== b.sectorId || !suppliersUnlocked(state)) return state
   const lines = Object.entries(quantities).map(([productId, qty]) => ({ productId, qty: Math.max(0, Math.round(qty)) }))
-  if (state.cash < quote(supplier, b.sectorId, lines).total) return state
+  if (state.cash < quote(supplier, b.sectorId, lines, purchasingRate(state)).total) return state
   return withBusiness(state, businessId, (s, bb) => {
     const o = createOrder(s, bb, getSupplier(s, supplierId), lines, false)
     if (o) log(s, `Commande passée chez ${supplier.name} pour ${bb.name} : ${eur(o.total)}, livraison prévue dans ${supplier.leadDays} j.`)
@@ -251,20 +253,27 @@ export function setAuto(state: GameState, businessId: string, productId: string,
 export const NEGOTIATION_COOLDOWN = 30
 export const MAX_NEGOTIATED = 0.09
 
+/** Tentative de négociation (par le joueur ou par un acheteur du siège). Renvoie vrai si la remise augmente. */
+export function tryNegotiate(s: GameState, x: Supplier): boolean {
+  x.negotiatedDay = s.day
+  // Être un bon client aide à négocier.
+  const chance = clamp(0.55 - x.negotiated * 4 + loyalty(x.spent).rate * 3, 0.15, 0.8)
+  if (rand(s) < chance) {
+    x.negotiated = Math.min(MAX_NEGOTIATED, round2(x.negotiated + 0.03))
+    return true
+  }
+  return false
+}
+
+export const canNegotiate = (s: GameState, x: Supplier) => x.active && s.day - x.negotiatedDay >= NEGOTIATION_COOLDOWN && x.negotiated < MAX_NEGOTIATED
+
 /** Tenter d'obtenir une remise : plus elle est déjà élevée, plus c'est difficile. */
 export function negotiate(state: GameState, supplierId: string): GameState {
   const sup = state.suppliers.find((x) => x.id === supplierId)
-  if (!sup || !sup.active || state.day - sup.negotiatedDay < NEGOTIATION_COOLDOWN || sup.negotiated >= MAX_NEGOTIATED) return state
+  if (!sup || !canNegotiate(state, sup)) return state
   return update(state, (s) => {
     const x = getSupplier(s, supplierId)
-    x.negotiatedDay = s.day
-    // Être un bon client aide à négocier.
-    const chance = clamp(0.55 - x.negotiated * 4 + loyalty(x.spent).rate * 3, 0.15, 0.8)
-    if (rand(s) < chance) {
-      x.negotiated = Math.min(MAX_NEGOTIATED, round2(x.negotiated + 0.03))
-      log(s, `Négociation réussie avec ${x.name} : remise portée à ${Math.round(x.negotiated * 100)} %.`, 'good')
-    } else {
-      log(s, `${x.name} refuse de baisser ses prix pour le moment.`, 'bad')
-    }
+    if (tryNegotiate(s, x)) log(s, `Négociation réussie avec ${x.name} : remise portée à ${Math.round(x.negotiated * 100)} %.`, 'good')
+    else log(s, `${x.name} refuse de baisser ses prix pour le moment.`, 'bad')
   })
 }
