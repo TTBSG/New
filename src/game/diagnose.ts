@@ -1,5 +1,6 @@
 import { getParcel, parcelRent } from './city'
 import { monthlyWages, perceivedPrice, serviceCapacity } from './engine'
+import { SLOTS, SLOT_NAMES } from './schedule'
 import { stockOf } from './stock'
 import { getSupplier, pendingOrders } from './supply'
 import { getSector } from './sectors'
@@ -26,7 +27,18 @@ export function diagnose(s: GameState, b: Business): Insight[] {
   }
   if (!last) return [{ tone: 'good', text: 'Le commerce vient d\'ouvrir : faites avancer le temps pour voir les premiers résultats.' }]
 
-  if (last.lostToCapacity > last.demand * 0.05)
+  if (last.slotDemand && last.slotCapacity) {
+    for (const slot of SLOTS) {
+      if (!b.hours[slot]) continue
+      const demand = last.slotDemand[slot]
+      const cap = last.slotCapacity[slot]
+      const name = SLOT_NAMES[slot].toLowerCase()
+      if (cap === 0 && demand > 0)
+        out.push({ tone: 'bad', text: `Personne au planning le ${name} : ~${demand} clients trouvent porte close. Planifiez quelqu'un dans l'onglet Équipe ou fermez ce créneau.` })
+      else if (demand > cap * 1.05)
+        out.push({ tone: 'bad', text: `Rush du ${name} : ${cap} clients servis pour ${demand} venus. Ajoutez quelqu'un sur ce créneau (temps partiel ou heures sup).` })
+    }
+  } else if (last.lostToCapacity > last.demand * 0.05)
     out.push({ tone: 'bad', text: `${Math.round(last.lostToCapacity)} ventes perdues hier faute de personnel (capacité ${Math.round(capacity)}/j pour une demande de ${last.demand}). Embauchez ou motivez l'équipe.` })
 
   const empty = b.products.filter((p) => stockOf(p) === 0).map((p) => sector.products.find((x) => x.id === p.id)!.name)
@@ -59,6 +71,9 @@ export function diagnose(s: GameState, b: Business): Insight[] {
 
   const tired = b.employees.filter((e) => e.morale < 35)
   if (tired.length) out.push({ tone: 'warn', text: `${tired.map((e) => e.name.split(' ')[0]).join(', ')} ${tired.length > 1 ? 'ont' : 'a'} le moral en berne : salaire trop bas ou équipe surchargée. Risque de démission.` })
+
+  const overworked = b.employees.filter((e) => e.shifts.length >= 3 && e.morale < 50)
+  if (overworked.length) out.push({ tone: 'warn', text: `${overworked.map((e) => e.name.split(' ')[0]).join(', ')} enchaîne${overworked.length > 1 ? 'nt' : ''} les heures sup et fatigue : un temps partiel en renfort soulagerait l'équipe.` })
 
   const week = b.history.slice(-7)
   const prevWeek = b.history.slice(-14, -7)

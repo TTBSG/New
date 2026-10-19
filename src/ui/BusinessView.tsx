@@ -19,7 +19,7 @@ import type { Business, GameState, ProductState } from '../game/types'
 import { BarChart, Meter, NumberField, Section, Stat } from './common'
 import { TIER_LABEL, dayLabel, eur, eurCents, num, signed } from './format'
 import { Icon, type IconName } from './icons'
-import { EmployeeCard, HiringPanel } from './staff'
+import { EmployeeCard, HiringPanel, PlanningPanel } from './staff'
 import type { Act } from './useGame'
 
 const TABS = ['Aperçu', 'Produits', 'Équipe', 'Marketing', 'Finances'] as const
@@ -260,6 +260,7 @@ function Team({ state, b, act }: { state: GameState; b: Business; act: Act }) {
         <Stat label="Capacité" value={`${num(serviceCapacity(b))}/j`} hint={last ? `demande hier ${num(last.demand)}` : undefined} />
         <Stat label="Masse salariale" value={`${eur(monthlyWages(b))}/mois`} />
       </div>
+      <PlanningPanel b={b} act={act} />
       <Section title={`Employés (${b.employees.length})`}>
         {b.employees.length === 0 && <p className="muted">Personne pour l'instant.</p>}
         {b.employees.map((e) => (
@@ -292,7 +293,7 @@ function Marketing({ b, act }: { b: Business; act: Act }) {
 
 function Finances({ b }: { b: Business }) {
   const recent = b.history.slice(-30)
-  const sum = (k: 'revenue' | 'grossMargin' | 'wages' | 'rent' | 'marketing' | 'profit' | 'purchases' | 'waste') => recent.reduce((a, r) => a + (r[k] ?? 0), 0)
+  const sum = (k: 'revenue' | 'grossMargin' | 'wages' | 'rent' | 'marketing' | 'profit' | 'purchases' | 'waste' | 'utilities') => recent.reduce((a, r) => a + (r[k] ?? 0), 0)
   const revenue = sum('revenue')
   const rows: [string, number][] = [
     ["Chiffre d'affaires", revenue],
@@ -300,6 +301,7 @@ function Finances({ b }: { b: Business }) {
     ['Produits périmés jetés', -sum('waste')],
     ['Salaires', -sum('wages')],
     ['Loyer', -sum('rent')],
+    ['Énergie et charges', -sum('utilities')],
     ['Marketing', -sum('marketing')],
   ]
   return (

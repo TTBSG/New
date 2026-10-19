@@ -1,5 +1,6 @@
 import { advisorMessage, dailyMessages, welcomeMessage } from './messages'
-import { employeeFromCandidate, employeesDay, fairSalary, level, migrateEmployee, refreshCandidates as refreshStaffCandidates, capacityMult, salesFactor, serviceQuality, TRIAL_DAYS } from './staff'
+import { SLOTS, UTILITIES_RATE, payOf, placeNewcomer, planTeam, slotCapacity, slotShares } from './schedule'
+import { employeeFromCandidate, employeesDay, fairSalary, level, migrateEmployee, refreshCandidates as refreshStaffCandidates, salesFactor, serviceQuality, TRIAL_DAYS } from './staff'
 import { STARTING_SECTORS, checkObjectives, currentRank, isSectorUnlocked, setNetWorth } from './objectives'
 import { generateCity, getParcel, isFree, parcelRent, parcelTraffic } from './city'
 import { canDelegate, loanRateCut, marketingBoost, maxBusinesses, payHq, refreshOfficeCandidates, startingReputation } from './hq'
@@ -13,7 +14,7 @@ import { clamp, log, newId, pick, rand, randRange, round2, update } from './util
 export { rand }
 export { fairSalary, unitCost }
 
-export const SAVE_VERSION = 8
+export const SAVE_VERSION = 9
 export const START_CASH = 60000
 const HISTORY_DAYS = 120
 const BANKRUPTCY_DAYS = 30
@@ -43,26 +44,13 @@ export function expectedDemand(traffic: number, sectorId: string, productId: str
   return traffic * getSector(sectorId).trafficMult * productDef(sectorId, productId).baseShare
 }
 
+/** Clients servables sur la journée (somme des créneaux ouverts). */
 export function serviceCapacity(b: Business): number {
-  const sector = getSector(b.sectorId)
-  let cap = 0
-  let staff = 0
-  let managers = 0
-  for (const e of b.employees) {
-    const role = sector.roles.find((r) => r.id === e.roleId)!
-    if (role.capacity > 0) {
-      staff++
-      cap += role.capacity * (0.7 + e.skills.service / 170) * (0.8 + e.morale / 250) * capacityMult(e)
-    } else {
-      managers++
-    }
-  }
-  const effectiveManagers = Math.min(managers, Math.ceil(staff / 5))
-  return cap * (1 + 0.12 * effectiveManagers)
+  return slotCapacity(b).reduce((a, x) => a + x, 0)
 }
 
 export function monthlyWages(b: Business): number {
-  return b.employees.reduce((sum, e) => sum + e.salary, 0)
+  return b.employees.reduce((sum, e) => sum + payOf(e), 0)
 }
 
 export function stockValue(b: Business): number {
@@ -172,17 +160,24 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
       randRange(s, 0.9, 1.1),
   )
 
-  // Demande par produit selon le prix, la qualité perçue et le talent de vendeur de l'équipe.
+  // Demande par produit selon le prix, la qualité perçue, le talent de vendeur de l'équipe et les horaires.
+  const shares = slotShares(b)
+  const openShare = shares.reduce((a, x) => a + x, 0)
   const upsell = salesFactor(b.employees.filter((e) => sector.roles.find((r) => r.id === e.roleId)!.capacity > 0))
   const demands = b.products.map((p) => {
     const def = sector.products.find((x) => x.id === p.id)!
     const ref = perceivedPrice(s, b.sectorId, p)
     const priceFactor = Math.min(2.5, (ref / Math.max(0.01, p.price)) ** sector.priceElasticity)
-    return visitors * def.baseShare * priceFactor * upsell
+    return visitors * def.baseShare * priceFactor * upsell * openShare
   })
   const totalDemand = demands.reduce((a, x) => a + x, 0)
-  const capacity = serviceCapacity(b)
-  const servedRatio = totalDemand > 0 ? Math.min(1, capacity / totalDemand) : 0
+  // Service créneau par créneau : un rush du midi mal staffé perd des clients même si le matin est calme.
+  const slotCap = slotCapacity(b)
+  const slotDemand = SLOTS.map((slot) => (openShare > 0 ? (totalDemand * shares[slot]) / openShare : 0))
+  const served = SLOTS.reduce<number>((a, slot) => a + Math.min(slotDemand[slot], slotCap[slot]), 0)
+  const servedRatio = totalDemand > 0 ? served / totalDemand : 0
+  // Un créneau ouvert sans personne ressemble à une porte fermée : ventes perdues, mais pas de file d'attente qui agace.
+  const frustrated = SLOTS.reduce<number>((a, slot) => a + (slotCap[slot] > 0 ? Math.max(0, slotDemand[slot] - slotCap[slot]) : 0), 0)
 
   let revenue = 0
   let grossMargin = 0
@@ -213,7 +208,7 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
       50 +
       (avgQuality - 60) * 0.8 -
       (avgPriceRatio - 1) * 40 -
-      (lostToCapacity / totalDemand) * 50 -
+      (frustrated / totalDemand) * 50 -
       (lostToStockout / totalDemand) * 50 +
       (quality - 50) * 0.25
     b.reputation = clamp(b.reputation + (clamp(target, 0, 100) - b.reputation) * 0.04, 0, 100)
@@ -227,11 +222,12 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
   const wages = monthlyWages(b) / 30
   const rent = (parcelRent(parcel) * b.rentMult) / 30
   const marketing = b.marketingDaily
-  s.cash -= wages + rent + marketing
+  const utilities = round2(b.hours.filter(Boolean).length * sector.setupCost * UTILITIES_RATE)
+  s.cash -= wages + rent + marketing + utilities
 
-  // Évolution des employés.
-  const load = capacity > 0 ? totalDemand / capacity : 0
-  const quits = employeesDay(s, b, load)
+  // Évolution des employés : la charge ressentie dépend des créneaux de chacun.
+  const slotLoad = SLOTS.map((slot) => (slotCap[slot] > 0 ? slotDemand[slot] / slotCap[slot] : 0))
+  const quits = employeesDay(s, b, (e) => (e.shifts.length ? e.shifts.reduce<number>((a, slot) => a + slotLoad[slot], 0) / e.shifts.length : 0))
   for (const e of quits) autoReplace(s, b, e)
 
   const report: DayReport = {
@@ -247,11 +243,14 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
     wages: round2(wages),
     rent: round2(rent),
     marketing,
-    profit: round2(grossMargin - wasteValue - wages - rent - marketing),
+    profit: round2(grossMargin - wasteValue - wages - rent - marketing - utilities),
     reputation: round2(b.reputation),
     waste: wasteValue,
     wasteByProduct,
     soldByProduct,
+    slotDemand: slotDemand.map(Math.round),
+    slotCapacity: slotCap.map(Math.round),
+    utilities,
   }
   s.stats.totalProfit += report.profit
   s.stats.totalRevenue += report.revenue
@@ -269,7 +268,11 @@ function autoReplace(s: GameState, b: Business, gone: Employee) {
     .sort((x, y) => level(y.skills) - level(x.skills))[0]
   if (!c) return
   s.candidates = s.candidates.filter((x) => x.id !== c.id)
-  b.employees.push(employeeFromCandidate(s, c))
+  const e = employeeFromCandidate(s, c)
+  const shifts = gone.shifts.filter((slot) => b.hours[slot])
+  if (shifts.length) e.shifts = shifts
+  else placeNewcomer(b, e, gone.shifts.length)
+  b.employees.push(e)
   log(s, `Le siège a recruté ${c.name} pour remplacer ${gone.name} chez ${b.name}.`)
 }
 
@@ -375,6 +378,7 @@ export function openBusiness(state: GameState, sectorId: string, parcelId: strin
       marketingDaily: 0,
       reputation: startingReputation(s),
       rentMult: 1,
+      hours: [true, true, true],
       history: [],
       products: sector.products.map((p) => ({
         id: p.id,
@@ -438,6 +442,7 @@ export function hire(state: GameState, businessId: string, candidateId: string):
   return withBusiness(state, businessId, (s, b) => {
     s.candidates = s.candidates.filter((x) => x.id !== candidateId)
     const e = employeeFromCandidate(s, c)
+    placeNewcomer(b, e)
     b.employees.push(e)
     log(s, `${e.name} rejoint ${b.name}.`)
     progress(s)
@@ -584,6 +589,19 @@ export function migrate(raw: GameState): GameState | null {
       `Pour recruter, passez une annonce ou faites appel à un cabinet, et menez des entretiens pour découvrir le caractère des candidats. Chaque embauche commence par ${TRIAL_DAYS} jours d'essai.`,
     ])
     s.version = 8
+  }
+  if (s.version === 8) {
+    for (const b of s.businesses) {
+      b.hours = [true, true, true]
+      for (const e of b.employees) e.shifts = [0, 1]
+      planTeam(b)
+    }
+    if (s.businesses.some((b) => b.employees.length))
+      advisorMessage(s, [
+        'Nouveau : les horaires et le planning ! La journée se découpe en trois créneaux (matin, midi, soir) et chaque secteur a ses heures de pointe.',
+        "Dans l'onglet Équipe de chaque commerce, choisissez vos créneaux d'ouverture et qui travaille quand : temps partiel (1 créneau, demi-salaire), temps plein (2) ou heures sup (3, mieux payées mais fatigantes). J'ai réparti vos équipes en temps plein.",
+      ])
+    s.version = 9
   }
   return s.version === SAVE_VERSION ? s : null
 }

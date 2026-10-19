@@ -121,13 +121,13 @@ export function interviewsLeft(s: GameState): number {
 }
 
 export function employeeFromCandidate(s: GameState, c: Candidate): Employee {
-  return { id: c.id, name: c.name, roleId: c.roleId, skills: { ...c.skills }, traits: [...c.traits], traitsKnown: c.traitsKnown, salary: c.salary, morale: 65, hiredDay: s.day, trialUntil: s.day + TRIAL_DAYS }
+  return { id: c.id, name: c.name, roleId: c.roleId, skills: { ...c.skills }, traits: [...c.traits], traitsKnown: c.traitsKnown, salary: c.salary, morale: 65, hiredDay: s.day, trialUntil: s.day + TRIAL_DAYS, shifts: [0, 1] }
 }
 
 // ---------- Journée des employés ----------
 
 /** Progression, moral et départs. Renvoie les employés qui démissionnent. */
-export function employeesDay(s: GameState, b: Business, load: number): Employee[] {
+export function employeesDay(s: GameState, b: Business, loadOf: (e: Employee) => number): Employee[] {
   const sector = getSector(b.sectorId)
   const roleOf = (e: Employee) => sector.roles.find((r) => r.id === e.roleId)!
   const hasManager = b.employees.some((e) => roleOf(e).capacity === 0)
@@ -148,7 +148,9 @@ export function employeesDay(s: GameState, b: Business, load: number): Employee[
     const moraleTarget = clamp(
       55 +
         (e.salary / fairSalary(role.baseSalary, level(e.skills)) - 1) * 150 -
-        Math.min(30, Math.max(0, load - 1) * 25) +
+        Math.min(30, Math.max(0, loadOf(e) - 1) * 25) -
+        // Les heures sup fatiguent.
+        (e.shifts.length >= 3 ? 12 : 0) +
         (hasManager ? 10 : 0) +
         (has(e, 'fiable') ? 5 : 0) -
         Math.min(12, others * 6),
@@ -200,5 +202,6 @@ export function migrateEmployee(s: GameState, e: Employee & { skill?: number }) 
   e.traits = randomTraits(s)
   e.traitsKnown = true
   e.trialUntil = 0
+  e.shifts = [0, 1]
   delete e.skill
 }

@@ -1,8 +1,9 @@
 import { fire, hire, inTrial, setSalary, severance } from '../game/engine'
 import { getSector } from '../game/sectors'
+import { CONTRACT_NAMES, PAY_FACTOR, SLOTS, SLOT_HOURS, SLOT_NAMES, autoPlan, payOf, setHours, slotCapacity, toggleShift } from '../game/schedule'
 import { HIRING_CHANNELS, SKILL_LABELS, TRAITS, fairSalary, interview, interviewsLeft, level, postJob } from '../game/staff'
-import type { Business, Candidate, Employee, GameState, Skills, TraitId } from '../game/types'
-import { Meter, NumberField } from './common'
+import type { Business, Candidate, Employee, GameState, Skills, Slot, TraitId } from '../game/types'
+import { Meter, NumberField, Section } from './common'
 import { dayLabel, eur } from './format'
 import { Icon } from './icons'
 import type { Act } from './useGame'
@@ -79,6 +80,9 @@ export function EmployeeCard({ state, b, e, act }: { state: GameState; b: Busine
           <span className="muted small">
             {role.name} · niveau {level(e.skills)}
           </span>
+          <span className="small">
+            {CONTRACT_NAMES[e.shifts.length]} · {e.shifts.map((x) => SLOT_NAMES[x].toLowerCase()).join(', ')} · <strong>{eur(payOf(e))}/mois</strong>
+          </span>
           {trial && <span className="pill soft trial-pill">Essai jusqu'au {dayLabel(e.trialUntil)}</span>}
         </div>
       </div>
@@ -91,7 +95,7 @@ export function EmployeeCard({ state, b, e, act }: { state: GameState; b: Busine
         <span className="small strong">{Math.round(e.morale)}</span>
       </div>
       <div className="field">
-        <label>Salaire mensuel (marché ~{eur(fair)})</label>
+        <label>Salaire temps plein (marché ~{eur(fair)})</label>
         <NumberField value={e.salary} step={50} suffix="€" onChange={(v) => act(setSalary, b.id, e.id, v)} />
       </div>
       <button
@@ -169,5 +173,91 @@ export function HiringPanel({ state, b, act }: { state: GameState; b: Business; 
         une période d'essai.
       </p>
     </>
+  )
+}
+
+/** Horaires d'ouverture et planning de l'équipe par créneau. */
+export function PlanningPanel({ b, act }: { b: Business; act: Act }) {
+  const share = getSector(b.sectorId).slotShare
+  const cap = slotCapacity(b)
+  const last = b.history.at(-1)
+  const openShare = SLOTS.reduce<number>((a, x) => a + (b.hours[x] ? share[x] : 0), 0)
+  const demandOf = (slot: Slot) => last?.slotDemand?.[slot] ?? (last && b.hours[slot] ? Math.round((last.demand * share[slot]) / openShare) : null)
+  return (
+    <Section
+      title="Horaires et planning"
+      right={
+        b.employees.length > 1 && (
+          <button className="btn small-btn" onClick={() => act(autoPlan, b.id)}>
+            Planning auto
+          </button>
+        )
+      }
+    >
+      <div className="hours-row">
+        {SLOTS.map((slot) => (
+          <button key={slot} className={`slot-chip ${b.hours[slot] ? 'on' : ''}`} aria-pressed={b.hours[slot]} onClick={() => act(setHours, b.id, slot, !b.hours[slot])}>
+            <strong>{SLOT_NAMES[slot]}</strong>
+            <span className="small">{SLOT_HOURS[slot]}</span>
+            <span className="small">{Math.round(share[slot] * 100)} % clients</span>
+            <span className="small strong">{b.hours[slot] ? 'Ouvert' : 'Fermé'}</span>
+          </button>
+        ))}
+      </div>
+      {b.employees.length > 0 && (
+        <table className="planning">
+          <thead>
+            <tr>
+              <th />
+              {SLOTS.map((slot) => (
+                <th key={slot}>{SLOT_NAMES[slot]}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {b.employees.map((e) => (
+              <tr key={e.id}>
+                <td>
+                  <strong className="small">{e.name.split(' ')[0]}</strong>
+                  <span className="small muted">{CONTRACT_NAMES[e.shifts.length]}</span>
+                </td>
+                {SLOTS.map((slot) => {
+                  const on = e.shifts.includes(slot)
+                  return (
+                    <td key={slot}>
+                      <button
+                        className={`shift-cell ${on ? 'on' : ''}`}
+                        disabled={!b.hours[slot] || (on && e.shifts.length === 1)}
+                        aria-pressed={on}
+                        aria-label={`${e.name} · ${SLOT_NAMES[slot]}`}
+                        onClick={() => act(toggleShift, b.id, e.id, slot)}
+                      >
+                        {on && <Icon name="check" size={14} />}
+                      </button>
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+            <tr className="coverage">
+              <td className="small muted">Servis / clients</td>
+              {SLOTS.map((slot) => {
+                const d = demandOf(slot)
+                const c = Math.round(cap[slot])
+                const tone = !b.hours[slot] ? '' : d === null ? '' : c >= d ? 'good' : c >= d * 0.85 ? 'warn' : 'bad'
+                return (
+                  <td key={slot} className={`small strong ${tone}`}>
+                    {b.hours[slot] ? `${c} / ${d ?? '?'}` : 'Fermé'}
+                  </td>
+                )
+              })}
+            </tr>
+          </tbody>
+        </table>
+      )}
+      <p className="small muted">
+        Touchez une case pour changer le planning. 1 créneau = temps partiel (salaire ×{PAY_FACTOR[1].toLocaleString('fr-FR')}), 2 = temps plein, 3 = heures sup (salaire ×{PAY_FACTOR[3].toLocaleString('fr-FR')}, fatigue). Un créneau fermé fait perdre ses clients mais économise l'énergie.
+      </p>
+    </Section>
   )
 }

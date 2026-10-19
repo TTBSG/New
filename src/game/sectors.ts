@@ -11,6 +11,7 @@ export const SECTORS: SectorDef[] = [
     setupCost: 15000,
     trafficMult: 1,
     priceElasticity: 1.6,
+    slotShare: [0.45, 0.35, 0.2],
     products: [
       { id: 'espresso', name: 'Espresso', unitCost: 0.35, refPrice: 2, baseShare: 0.32 },
       { id: 'cappuccino', name: 'Cappuccino', unitCost: 0.7, refPrice: 3.8, baseShare: 0.22 },
@@ -27,6 +28,7 @@ export const SECTORS: SectorDef[] = [
     setupCost: 25000,
     trafficMult: 1.1,
     priceElasticity: 1.3,
+    slotShare: [0.5, 0.3, 0.2],
     products: [
       { id: 'baguette', name: 'Baguette', unitCost: 0.3, refPrice: 1.2, baseShare: 0.45, shelfLife: 1 },
       { id: 'viennoiserie', name: 'Viennoiserie', unitCost: 0.4, refPrice: 1.4, baseShare: 0.25, shelfLife: 1 },
@@ -43,6 +45,7 @@ export const SECTORS: SectorDef[] = [
     setupCost: 60000,
     trafficMult: 0.55,
     priceElasticity: 1.2,
+    slotShare: [0.1, 0.5, 0.4],
     products: [
       { id: 'menu', name: 'Menu du jour', unitCost: 5.5, refPrice: 16, baseShare: 0.119, shelfLife: 2 },
       { id: 'carte', name: 'Plat à la carte', unitCost: 8, refPrice: 22, baseShare: 0.068, shelfLife: 3 },
@@ -59,6 +62,7 @@ export const SECTORS: SectorDef[] = [
     setupCost: 40000,
     trafficMult: 0.9,
     priceElasticity: 1.8,
+    slotShare: [0.15, 0.45, 0.4],
     products: [
       { id: 'tshirt', name: 'T-shirt', unitCost: 6, refPrice: 22, baseShare: 0.0155 },
       { id: 'jean', name: 'Jean', unitCost: 18, refPrice: 65, baseShare: 0.0077 },
@@ -75,6 +79,7 @@ export const SECTORS: SectorDef[] = [
     setupCost: 80000,
     trafficMult: 0.7,
     priceElasticity: 2.2,
+    slotShare: [0.15, 0.45, 0.4],
     products: [
       { id: 'smartphone', name: 'Smartphone', unitCost: 430, refPrice: 599, baseShare: 0.0027 },
       { id: 'ordinateur', name: 'Ordinateur portable', unitCost: 620, refPrice: 899, baseShare: 0.0014 },
@@ -91,6 +96,7 @@ export const SECTORS: SectorDef[] = [
     setupCost: 50000,
     trafficMult: 1.3,
     priceElasticity: 1.4,
+    slotShare: [0.25, 0.35, 0.4],
     products: [
       { id: 'epicerie', name: 'Épicerie', unitCost: 1.4, refPrice: 2.3, baseShare: 0.5 },
       { id: 'frais', name: 'Produits frais', unitCost: 2.2, refPrice: 3.9, baseShare: 0.3, shelfLife: 4 },

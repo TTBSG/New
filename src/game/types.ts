@@ -36,6 +36,8 @@ export interface SectorDef {
   priceElasticity: number
   products: ProductDef[]
   roles: RoleDef[]
+  /** Répartition des clients sur la journée (matin, midi, soir), somme = 1. */
+  slotShare: [number, number, number]
 }
 
 export interface DistrictDef {
@@ -151,6 +153,9 @@ export type Skills = Record<SkillId, number>
 
 export type TraitId = 'rapide' | 'souriant' | 'vendeur' | 'fiable' | 'ambitieux' | 'mentor' | 'raleur' | 'distrait' | 'paresseux'
 
+/** Créneaux de la journée : matin, midi / après-midi, soir. */
+export type Slot = 0 | 1 | 2
+
 export interface Employee {
   id: string
   name: string
@@ -167,6 +172,8 @@ export interface Employee {
   hiredDay: number
   /** Fin de la période d'essai (on peut s'en séparer sans indemnité jusque-là). */
   trialUntil: number
+  /** Créneaux travaillés : 1 = temps partiel, 2 = temps plein, 3 = heures sup. */
+  shifts: Slot[]
 }
 
 export interface DayReport {
@@ -189,6 +196,11 @@ export interface DayReport {
   waste?: number
   wasteByProduct?: Record<string, number>
   soldByProduct?: Record<string, number>
+  /** Clients et capacité par créneau (matin, midi, soir). */
+  slotDemand?: number[]
+  slotCapacity?: number[]
+  /** Énergie et charges des créneaux ouverts. */
+  utilities?: number
 }
 
 export interface Business {
@@ -205,6 +217,8 @@ export interface Business {
   reputation: number
   /** Ajustement du loyer négocié avec le propriétaire (1 = loyer de base). */
   rentMult: number
+  /** Créneaux d'ouverture (matin, midi, soir). */
+  hours: [boolean, boolean, boolean]
   history: DayReport[]
 }
 
