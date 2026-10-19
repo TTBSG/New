@@ -1,8 +1,8 @@
 import { fire, hire, inTrial, setSalary, severance } from '../game/engine'
 import { getSector } from '../game/sectors'
 import { CONTRACT_NAMES, PAY_FACTOR, SLOTS, SLOT_HOURS, SLOT_NAMES, autoPlan, payOf, setHours, slotCapacity, toggleShift } from '../game/schedule'
-import { HIRING_CHANNELS, SKILL_LABELS, TRAITS, fairSalary, interview, interviewsLeft, level, postJob } from '../game/staff'
-import type { Business, Candidate, Employee, GameState, Skills, Slot, TraitId } from '../game/types'
+import { ABSENCE_NAMES, CHEF, HIRING_CHANNELS, SKILL_LABELS, TRAINING, TRAITS, canTrain, fairSalary, interview, interviewsLeft, level, moraleFactors, moraleTarget, postJob, promote, promotionBlock, train } from '../game/staff'
+import type { Business, Candidate, Employee, GameState, SkillId, Skills, Slot, TraitId } from '../game/types'
 import { Meter, NumberField, Section } from './common'
 import { dayLabel, eur } from './format'
 import { Icon } from './icons'
@@ -67,10 +67,19 @@ export function TraitBadges({ traits, known, detailed }: { traits: TraitId[]; kn
   )
 }
 
+/** Charge ressentie hier sur les créneaux de l'employé (clients / capacité). */
+function lastLoad(b: Business, e: Employee): number {
+  const last = b.history.at(-1)
+  if (!last?.slotDemand || !last.slotCapacity || !e.shifts.length) return 0
+  return e.shifts.reduce<number>((a, slot) => a + (last.slotCapacity![slot] > 0 ? last.slotDemand![slot] / last.slotCapacity![slot] : 0), 0) / e.shifts.length
+}
+
 export function EmployeeCard({ state, b, e, act }: { state: GameState; b: Business; e: Employee; act: Act }) {
   const role = getSector(b.sectorId).roles.find((r) => r.id === e.roleId)!
   const fair = fairSalary(role.baseSalary, level(e.skills))
   const trial = inTrial(state, e)
+  const factors = moraleFactors(state, b, e, lastLoad(b, e))
+  const target = moraleTarget(factors)
   return (
     <div className="person">
       <div className="person-top">
@@ -78,12 +87,19 @@ export function EmployeeCard({ state, b, e, act }: { state: GameState; b: Busine
         <div className="choice-main">
           <strong>{e.name}</strong>
           <span className="muted small">
-            {role.name} · niveau {level(e.skills)}
+            {e.chef ? "Chef d'équipe" : role.name} · niveau {level(e.skills)} · {state.day - e.hiredDay} j d'ancienneté
           </span>
           <span className="small">
             {CONTRACT_NAMES[e.shifts.length]} · {e.shifts.map((x) => SLOT_NAMES[x].toLowerCase()).join(', ')} · <strong>{eur(payOf(e))}/mois</strong>
           </span>
-          {trial && <span className="pill soft trial-pill">Essai jusqu'au {dayLabel(e.trialUntil)}</span>}
+          <div className="row wrap pills">
+            {trial && <span className="pill soft">Essai jusqu'au {dayLabel(e.trialUntil)}</span>}
+            {e.absence && (
+              <span className={`pill soft absence-${e.absence.reason}`}>
+                {ABSENCE_NAMES[e.absence.reason]} jusqu'au {dayLabel(e.absence.until)}
+              </span>
+            )}
+          </div>
         </div>
       </div>
       <TraitBadges traits={e.traits} known={e.traitsKnown} detailed />
@@ -94,6 +110,62 @@ export function EmployeeCard({ state, b, e, act }: { state: GameState; b: Busine
         <Meter value={e.morale} label="Moral" />
         <span className="small strong">{Math.round(e.morale)}</span>
       </div>
+      <div className="skill-bar">
+        <span className="small">Fatigue</span>
+        <Meter value={e.fatigue} label="Fatigue" inverted />
+        <span className="small strong">{Math.round(e.fatigue)}</span>
+      </div>
+      <details className="fold">
+        <summary>
+          Pourquoi ce moral ? <span className="muted small">tend vers {Math.round(target)}</span>
+        </summary>
+        <ul className="factors">
+          {factors.map((f) => (
+            <li key={f.label}>
+              <span>{f.label}</span>
+              <strong className={f.label === 'Base' ? '' : f.value > 0 ? 'good' : 'bad'}>{f.label === 'Base' ? f.value : `${f.value > 0 ? '+' : ''}${f.value}`}</strong>
+            </li>
+          ))}
+        </ul>
+      </details>
+      <details className="fold">
+        <summary>Formation et promotion</summary>
+        <p className="small muted">
+          Formation : {eur(TRAINING.cost)}, {TRAINING.days} jours d'absence, +{TRAINING.gain} dans la compétence choisie.
+        </p>
+        <div className="row wrap">
+          {(Object.keys(SKILL_LABELS) as SkillId[]).map((k) => {
+            const block = canTrain(state, e, k)
+            return (
+              <button key={k} className="btn small-btn" disabled={!!block} title={block ?? undefined} onClick={() => act(train, b.id, e.id, k)}>
+                {SKILL_LABELS[k]} +{TRAINING.gain}
+              </button>
+            )
+          })}
+        </div>
+        {role.capacity > 0 && (
+          <div className="promos">
+            {(['chef', 'manager'] as const).map((to) => {
+              const block = promotionBlock(state, b, e, to)
+              if (to === 'chef' && e.chef) return null
+              return (
+                <div key={to} className="promo">
+                  <span className="choice-main">
+                    <strong className="small">{to === 'chef' ? "Chef d'équipe" : 'Manager'}</strong>
+                    <span className="small muted">
+                      {to === 'chef' ? `+${Math.round(CHEF.raise * 100)} % de salaire · ses collègues de créneau servent ${Math.round(CHEF.boost * 100)} % plus vite` : "Encadre toute l'équipe (+12 % d'efficacité pour 5 employés, + moral) mais ne sert plus"}
+                    </span>
+                    {block && <span className="small warn">{block}</span>}
+                  </span>
+                  <button className="btn small-btn primary" disabled={!!block} onClick={() => act(promote, b.id, e.id, to)}>
+                    Promouvoir
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </details>
       <div className="field">
         <label>Salaire temps plein (marché ~{eur(fair)})</label>
         <NumberField value={e.salary} step={50} suffix="€" onChange={(v) => act(setSalary, b.id, e.id, v)} />
@@ -219,14 +291,14 @@ export function PlanningPanel({ b, act }: { b: Business; act: Act }) {
               <tr key={e.id}>
                 <td>
                   <strong className="small">{e.name.split(' ')[0]}</strong>
-                  <span className="small muted">{CONTRACT_NAMES[e.shifts.length]}</span>
+                  <span className={`small ${e.absence?.reason === 'maladie' ? 'bad' : 'muted'}`}>{e.absence ? ABSENCE_NAMES[e.absence.reason] : `${CONTRACT_NAMES[e.shifts.length]}${e.chef ? ' · chef' : ''}`}</span>
                 </td>
                 {SLOTS.map((slot) => {
                   const on = e.shifts.includes(slot)
                   return (
                     <td key={slot}>
                       <button
-                        className={`shift-cell ${on ? 'on' : ''}`}
+                        className={`shift-cell ${on ? 'on' : ''} ${on && e.absence ? 'away' : ''}`}
                         disabled={!b.hours[slot] || (on && e.shifts.length === 1)}
                         aria-pressed={on}
                         aria-label={`${e.name} · ${SLOT_NAMES[slot]}`}

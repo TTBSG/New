@@ -16,6 +16,7 @@ const KIND_STYLE: Record<Conversation['kind'], { color: string; icon: IconName }
   landlord: { color: '#8a6142', icon: 'key' },
   press: { color: '#e85d8a', icon: 'megaphone' },
   bank: { color: '#3987e5', icon: 'bank' },
+  staff: { color: '#2fa58f', icon: 'people' },
 }
 
 export function Avatar({ kind, size = 44 }: { kind: Conversation['kind']; size?: number }) {
@@ -93,7 +94,7 @@ function ConversationView({ state, act, conv }: { state: GameState; act: Act; co
           </div>
         ))}
 
-        {conv.kind === 'raise' && employee && business && conv.choices.length > 0 && (
+        {(conv.kind === 'raise' || conv.kind === 'staff') && employee && business && conv.choices.length > 0 && (
           <div className="info-card">
             <div className="info-title">FICHE EMPLOYÉ</div>
             <div className="info-row">
@@ -113,6 +114,10 @@ function ConversationView({ state, act, conv }: { state: GameState; act: Act; co
               <strong>{Math.round(employee.morale)}</strong>
             </div>
             <Meter value={employee.morale} label="Moral" />
+            <div className="info-row">
+              <span>Fatigue</span>
+              <strong>{Math.round(employee.fatigue)}</strong>
+            </div>
           </div>
         )}
         <div ref={endRef} />

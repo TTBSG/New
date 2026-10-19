@@ -506,3 +506,19 @@ input[type='range'] { width: 100%; accent-color: var(--accent); }
 .planning .good { color: var(--good); }
 .planning .warn { color: var(--warn); }
 .planning .bad { color: var(--bad); }
+
+/* ---------- Évolution et bien-être ---------- */
+.person .pills { gap: 6px; margin-top: 4px; }
+.absence-maladie { background: #fde2e2; color: var(--bad); }
+.absence-formation { background: #e3edfc; color: #2a62b8; }
+.absence-conges { background: #e7f6ec; color: var(--good); }
+.fold { border: 1px solid var(--border); border-radius: 12px; padding: 8px 12px; margin-top: 8px; }
+.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; display: flex; justify-content: space-between; gap: 8px; }
+.fold[open] summary { margin-bottom: 6px; }
+.factors { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+.factors li { display: flex; justify-content: space-between; }
+.factors .good { color: var(--good); }
+.factors .bad { color: var(--bad); }
+.promos { display: grid; gap: 8px; margin-top: 10px; }
+.promo { display: flex; gap: 10px; align-items: center; }
+.shift-cell.on.away { background: repeating-linear-gradient(45deg, #f1b596 0 6px, #f6c9b1 6px 12px); border-color: #f1b596; }

@@ -11,9 +11,11 @@ export function Stat({ label, value, tone, hint }: { label: string; value: React
   )
 }
 
-export function Meter({ value, max = 100, label }: { value: number; max?: number; label?: string }) {
+/** Jauge colorée ; `inverted` quand une valeur haute est mauvaise (fatigue). */
+export function Meter({ value, max = 100, label, inverted }: { value: number; max?: number; label?: string; inverted?: boolean }) {
   const pct = Math.max(0, Math.min(100, (value / max) * 100))
-  const level = pct < 30 ? 'low' : pct < 60 ? 'mid' : 'high'
+  const score = inverted ? 100 - pct : pct
+  const level = score < 30 ? 'low' : score < 60 ? 'mid' : 'high'
   return (
     <div className="meter" role="meter" aria-valuenow={Math.round(value)} aria-valuemax={max} aria-label={label}>
       <div className={`meter-fill ${level}`} style={{ width: `${pct}%` }} />

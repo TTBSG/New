@@ -3,7 +3,7 @@ import { HQ_RANK, SHOPS_WITHOUT_HQ, canDelegate } from './hq'
 import { currentRank } from './objectives'
 import { getSector } from './sectors'
 import { addBatch, updateAvgCost } from './stock'
-import { fairSalary, level } from './staff'
+import { TRAITS, applyPromotion, fairSalary, has, level, promotionBlock } from './staff'
 import type { Business, Choice, Conversation, ConversationKind, Employee, GameState } from './types'
 import { clamp, log, newId, pick, rand, randRange, update } from './util'
 
@@ -149,6 +149,95 @@ function maybeRaiseRequest(s: GameState, b: Business) {
   }
 }
 
+// ---------- Histoires d'équipe ----------
+
+const firstName = (e: Employee) => e.name.split(' ')[0]
+
+function maybeStaffStory(s: GameState, b: Business) {
+  if (pending(s, 'staff', { businessId: b.id })) return
+  const present = b.employees.filter((e) => !e.absence)
+  const who = (e: Employee) => ({ contact: e.name, role: `${roleOf(b, e).name} · ${b.name}` })
+  const ask = (e: Employee, lines: string[], extra: Partial<Conversation>) => send(s, 'staff', who(e), lines, { businessId: b.id, employeeId: e.id, ...extra })
+
+  // Un ambitieux qui a fait ses preuves veut monter en grade.
+  const ambitious = present.filter((e) => has(e, 'ambitieux') && !promotionBlock(s, b, e, 'chef'))
+  if (ambitious.length && rand(s) < 1 / 20) {
+    const e = pick(s, ambitious)
+    ask(e, [`Ça fait ${Math.floor((s.day - e.hiredDay) / 7)} semaines que je donne tout ici.`, "Je me sens prêt(e) à encadrer l'équipe. Vous me nommeriez chef d'équipe ?"], {
+      topic: 'promotion',
+      expiresDay: s.day + 7,
+      choices: [
+        { id: 'accept', label: "« Bravo, tu deviens chef d'équipe ! »", hint: "+15 % de salaire · booste ses collègues de créneau", tone: 'good' },
+        { id: 'refuse', label: '« Pas encore, continue comme ça. »', hint: 'moral −− · risque de départ', tone: 'bad' },
+      ],
+    })
+    return
+  }
+
+  // Un mentor propose de prendre un nouveau sous son aile.
+  const mentor = present.find((e) => has(e, 'mentor'))
+  const rookies = present.filter((e) => e.id !== mentor?.id && level(e.skills) < 50 && s.day - e.hiredDay <= 30)
+  if (mentor && rookies.length && rand(s) < 1 / 25) {
+    const n = pick(s, rookies)
+    ask(mentor, [`${firstName(n)} débute et galère un peu en ce moment.`, "Si vous êtes d'accord, je le/la prends sous mon aile pendant quelques jours pour lui montrer les ficelles."], {
+      topic: 'mentor',
+      otherId: n.id,
+      expiresDay: s.day + 4,
+      choices: [
+        { id: 'accept', label: '« Super idée, vas-y ! »', hint: `${firstName(n)} +6 en service et qualité · fatigue de ${firstName(mentor)} +`, tone: 'good' },
+        { id: 'refuse', label: '« Concentre-toi sur ton travail. »', hint: `moral de ${firstName(mentor)} −` },
+      ],
+    })
+    return
+  }
+
+  // Un râleur finit par provoquer des tensions.
+  const grumpy = present.find((e) => has(e, 'raleur'))
+  const victims = present.filter((e) => e.id !== grumpy?.id)
+  if (grumpy && victims.length && rand(s) < 1 / 40) {
+    const v = pick(s, victims)
+    const mediation = 300
+    ask(v, [`Je ne voulais pas en arriver là, mais ça devient compliqué avec ${firstName(grumpy)}.`, 'Il/elle critique tout, tout le temps, et l\'ambiance en prend un coup. Vous pouvez faire quelque chose ?'], {
+      topic: 'conflit',
+      otherId: grumpy.id,
+      amount: mediation,
+      expiresDay: s.day + 5,
+      choices: [
+        { id: 'recadrer', label: `« Je vais recadrer ${firstName(grumpy)}. »`, hint: `moral de ${firstName(grumpy)} − · reste de l'équipe +` },
+        { id: 'mediation', label: '« On organise une médiation avec un pro. »', hint: `−${eur(mediation)} · tout le monde +`, tone: 'good' },
+        { id: 'refuse', label: '« Débrouillez-vous entre vous. »', hint: `moral de ${firstName(v)} −−`, tone: 'bad' },
+      ],
+    })
+    if (!grumpy.traitsKnown) {
+      grumpy.traitsKnown = true
+      log(s, `Vous découvrez le caractère de ${grumpy.name} : ${grumpy.traits.map((t) => TRAITS[t].name.toLowerCase()).join(' et ')}.`)
+    }
+    return
+  }
+
+  // Demande de congés.
+  const settled = present.filter((e) => s.day > e.trialUntil)
+  if (settled.length && rand(s) < 1 / 45) {
+    const e = pick(s, settled)
+    // Le responsable RH gère les congés sans vous déranger.
+    if (canDelegate(s, 'recruteur')) {
+      e.absence = { reason: 'conges', until: s.day + 3 }
+      e.morale = clamp(e.morale + 12, 0, 100)
+      log(s, `La RH a accordé 3 jours de congés à ${e.name} (${b.name}).`)
+      return
+    }
+    const reason = pick(s, ['Ma sœur se marie', 'Je déménage', "J'aurais besoin de souffler un peu", 'Mes parents viennent me voir'])
+    ask(e, [`${reason} : est-ce que je pourrais prendre 3 jours de congés à partir de demain ?`], {
+      topic: 'conges',
+      expiresDay: s.day + 3,
+      choices: [
+        { id: 'accept', label: '« Bien sûr, profite ! »', hint: '3 jours d\'absence · moral ++ · fatigue −−', tone: 'good' },
+        { id: 'refuse', label: '« Pas en ce moment, désolé. »', hint: 'moral −', tone: 'bad' },
+      ],
+    })
+  }
+}
+
 function maybeSupplierDeal(s: GameState) {
   if (!s.businesses.length || rand(s) > 1 / 20) return
   const b = pick(s, s.businesses)
@@ -242,6 +331,7 @@ export function dailyMessages(s: GameState) {
     adviceFor(s, b)
     maybeRaiseRequest(s, b)
     maybeLandlord(s, b)
+    maybeStaffStory(s, b)
   }
   maybeSupplierDeal(s)
   maybePress(s)
@@ -260,14 +350,14 @@ function expireRequests(s: GameState) {
     if (c.kind === 'landlord') {
       applyChoice(s, c, 'accept')
       reply(c, 'them', 'Sans réponse de votre part, la hausse s\'applique.', s.day)
-    } else if (c.kind === 'raise') {
+    } else if (c.kind === 'raise' || c.kind === 'staff') {
       applyChoice(s, c, 'refuse')
       reply(c, 'them', 'Pas de réponse… Je comprends le message.', s.day)
     } else {
       reply(c, 'them', 'L\'offre a expiré.', s.day)
     }
     // Une simple offre expirée n'a pas besoin d'attirer l'attention ; une conséquence, si.
-    c.unread = c.kind === 'landlord' || c.kind === 'raise'
+    c.unread = c.kind === 'landlord' || c.kind === 'raise' || c.kind === 'staff'
     c.choices = []
   }
 }
@@ -294,6 +384,8 @@ function applyChoice(s: GameState, c: Conversation, choiceId: string): string | 
       e.morale = clamp(e.morale - 18, 0, 100)
       return 'Je vois. Je vais réfléchir à mon avenir…'
     }
+    case 'staff':
+      return staffChoice(s, b!, c, choiceId)
     case 'supplier': {
       if (choiceId !== 'accept') return 'Pas de souci, à une prochaine fois.'
       if (s.cash < c.amount!) return 'Votre trésorerie ne permet pas ce paiement.'
@@ -334,9 +426,62 @@ function applyChoice(s: GameState, c: Conversation, choiceId: string): string | 
   }
 }
 
+function staffChoice(s: GameState, b: Business, c: Conversation, choiceId: string): string {
+  const e = b.employees.find((x) => x.id === c.employeeId)
+  if (!e) return 'Cette personne ne travaille plus chez vous.'
+  const other = b.employees.find((x) => x.id === c.otherId)
+  const mood = (x: Employee, v: number) => (x.morale = clamp(x.morale + v, 0, 100))
+  switch (c.topic) {
+    case 'promotion':
+      if (choiceId === 'accept') {
+        if (promotionBlock(s, b, e, 'chef')) return "Ah… finalement ce n'est plus possible."
+        applyPromotion(s, b, e, 'chef')
+        return "Merci ! Je vais tirer l'équipe vers le haut, promis."
+      }
+      mood(e, -15)
+      return "D'accord… j'espérais mieux."
+    case 'mentor':
+      if (choiceId === 'accept' && other) {
+        other.skills.service = Math.min(100, other.skills.service + 6)
+        other.skills.qualite = Math.min(100, other.skills.qualite + 6)
+        e.fatigue = clamp(e.fatigue + 10, 0, 100)
+        mood(e, 5)
+        mood(other, 5)
+        log(s, `${e.name} a formé ${other.name} : il/elle progresse vite.`, 'good')
+        return `Top, je m'occupe de ${firstName(other)} !`
+      }
+      mood(e, -5)
+      return 'Très bien, comme vous voudrez.'
+    case 'conflit':
+      if (choiceId === 'recadrer' && other) {
+        mood(other, -10)
+        for (const x of b.employees) if (x.id !== other.id) mood(x, 5)
+        return "Merci, ça va faire du bien à l'équipe."
+      }
+      if (choiceId === 'mediation') {
+        if (s.cash < c.amount!) return 'Votre trésorerie ne permet pas ce paiement.'
+        s.cash -= c.amount!
+        for (const x of b.employees) mood(x, 6)
+        return 'La médiation a vraiment détendu l\'atmosphère. Merci !'
+      }
+      mood(e, -12)
+      return "Je vois… je vais serrer les dents."
+    case 'conges':
+      if (choiceId === 'accept') {
+        if (!e.absence) e.absence = { reason: 'conges', until: s.day + 3 }
+        mood(e, 12)
+        return 'Merci beaucoup, à dans 3 jours !'
+      }
+      mood(e, -10)
+      return "Bon… tant pis."
+    default:
+      return ''
+  }
+}
+
 /** Les choix qui coûtent de l'argent tout de suite exigent une trésorerie suffisante. */
 export function canAfford(s: GameState, c: Conversation, choiceId: string): boolean {
-  const pays = (c.kind === 'supplier' || c.kind === 'press') && choiceId === 'accept'
+  const pays = ((c.kind === 'supplier' || c.kind === 'press') && choiceId === 'accept') || (c.kind === 'staff' && choiceId === 'mediation')
   return !pays || s.cash >= (c.amount ?? 0)
 }
 

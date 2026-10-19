@@ -1,5 +1,6 @@
 import { advisorMessage, dailyMessages, welcomeMessage } from './messages'
 import { SLOTS, UTILITIES_RATE, payOf, placeNewcomer, planTeam, slotCapacity, slotShares } from './schedule'
+import { benefitsPerEmployee } from './staff'
 import { employeeFromCandidate, employeesDay, fairSalary, level, migrateEmployee, refreshCandidates as refreshStaffCandidates, salesFactor, serviceQuality, TRIAL_DAYS } from './staff'
 import { STARTING_SECTORS, checkObjectives, currentRank, isSectorUnlocked, setNetWorth } from './objectives'
 import { generateCity, getParcel, isFree, parcelRent, parcelTraffic } from './city'
@@ -14,7 +15,7 @@ import { clamp, log, newId, pick, rand, randRange, round2, update } from './util
 export { rand }
 export { fairSalary, unitCost }
 
-export const SAVE_VERSION = 9
+export const SAVE_VERSION = 10
 export const START_CASH = 60000
 const HISTORY_DAYS = 120
 const BANKRUPTCY_DAYS = 30
@@ -219,7 +220,8 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
   // Fin de journée : produits périmés jetés, commandes automatiques.
   const { wasteValue, wasteByProduct } = closeDay(s, b, soldByProduct)
 
-  const wages = monthlyWages(b) / 30
+  // Salaires et avantages sociaux (mutuelle, tickets resto, prime) gérés par la RH.
+  const wages = (monthlyWages(b) + b.employees.length * benefitsPerEmployee(s)) / 30
   const rent = (parcelRent(parcel) * b.rentMult) / 30
   const marketing = b.marketingDaily
   const utilities = round2(b.hours.filter(Boolean).length * sector.setupCost * UTILITIES_RATE)
@@ -602,6 +604,16 @@ export function migrate(raw: GameState): GameState | null {
         "Dans l'onglet Équipe de chaque commerce, choisissez vos créneaux d'ouverture et qui travaille quand : temps partiel (1 créneau, demi-salaire), temps plein (2) ou heures sup (3, mieux payées mais fatigantes). J'ai réparti vos équipes en temps plein.",
       ])
     s.version = 9
+  }
+  if (s.version === 9) {
+    for (const b of s.businesses) for (const e of b.employees) e.fatigue = 0
+    if (s.hq) Object.assign(s.hq.policies, { mutuelle: false, tickets: false, prime: false })
+    if (s.businesses.some((b) => b.employees.length))
+      advisorMessage(s, [
+        'Nouveau : vos employés évoluent ! Formez-les (2 jours d\'absence, +10 dans une compétence) et promouvez les meilleurs chef d\'équipe ou manager.',
+        'Surveillez aussi leur fatigue : les heures sup et les rushs les épuisent, et un employé épuisé finit en arrêt maladie. Avec un responsable RH au siège, vous pourrez offrir mutuelle, tickets restaurant et primes.',
+      ])
+    s.version = 10
   }
   return s.version === SAVE_VERSION ? s : null
 }

@@ -17,7 +17,7 @@ export const HQ_LEVELS = [
 
 export const OFFICE_ROLES: Record<OfficeRole, { name: string; baseSalary: number; effect: string }> = {
   acheteur: { name: 'Acheteur', baseSalary: 3200, effect: 'Remise sur toutes les commandes fournisseurs (jusqu\'à −3 % chacun, 2 au maximum).' },
-  recruteur: { name: 'Responsable RH', baseSalary: 3000, effect: 'Mène tous les entretiens à votre place et attire de meilleurs candidats (+6 de compétence chacun, 2 au maximum).' },
+  recruteur: { name: 'Responsable RH', baseSalary: 3000, effect: 'Mène tous les entretiens, accorde les congés, gère les avantages sociaux et attire de meilleurs candidats (+6 de compétence chacun, 2 au maximum).' },
   marketing: { name: 'Responsable marketing', baseSalary: 3400, effect: '+4 % de visiteurs dans tous vos commerces (3 au maximum).' },
   logisticien: { name: 'Directeur logistique', baseSalary: 3600, effect: 'Livraisons plus fiables (+3 points chacun, 2 au maximum). Indispensable pour les entrepôts.' },
   comptable: { name: 'Contrôleur de gestion', baseSalary: 3000, effect: 'Taux de vos prêts réduit d\'un point chacun (2 au maximum).' },
@@ -111,7 +111,7 @@ export function openHq(state: GameState, parcelId: string): GameState {
       parcelId,
       level: 1,
       staff: [],
-      policies: { autoReplace: false, raiseLimit: 0, autoNegotiate: false, autoStock: false },
+      policies: { autoReplace: false, raiseLimit: 0, autoNegotiate: false, autoStock: false, mutuelle: false, tickets: false, prime: false },
       openedDay: s.day,
     }
     log(s, `Votre siège social s'installe au ${parcel.address} !`, 'good')

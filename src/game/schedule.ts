@@ -1,5 +1,5 @@
 import { getSector } from './sectors'
-import { capacityMult } from './staff'
+import { CHEF, capacityMult } from './staff'
 import type { Business, Employee, GameState, Slot } from './types'
 import { log, update } from './util'
 
@@ -24,14 +24,17 @@ export function employeeSlotCapacity(b: Business, e: Employee): number {
   return role.capacity * SLOT_CAPACITY * (0.7 + e.skills.service / 170) * (0.8 + e.morale / 250) * capacityMult(e)
 }
 
-/** Capacité de service par créneau (0 si fermé). Un manager présent booste jusqu'à 5 employés du créneau. */
+export const onShift = (e: Employee, slot: Slot) => !e.absence && e.shifts.includes(slot)
+
+/** Capacité de service par créneau (0 si fermé). Un manager présent booste jusqu'à 5 employés du créneau, un chef d'équipe ses collègues. */
 export function slotCapacity(b: Business): number[] {
   return SLOTS.map((slot) => {
     if (!b.hours[slot]) return 0
-    const team = b.employees.filter((e) => e.shifts.includes(slot))
+    const team = b.employees.filter((e) => onShift(e, slot))
     const staff = team.filter((e) => !isManager(b, e))
     const managers = team.length - staff.length
-    const cap = staff.reduce((a, e) => a + employeeSlotCapacity(b, e), 0)
+    const chef = staff.find((e) => e.chef)
+    const cap = staff.reduce((a, e) => a + employeeSlotCapacity(b, e) * (chef && chef.id !== e.id ? 1 + CHEF.boost : 1), 0)
     return cap * (1 + 0.12 * Math.min(managers, Math.ceil(staff.length / 5)))
   })
 }

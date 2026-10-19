@@ -72,7 +72,7 @@ describe('messages', () => {
     for (const b of old.businesses as unknown as { employees: Record<string, unknown>[] }[])
       for (const e of b.employees) {
         e.skill = 60
-        for (const k of ['skills', 'traits', 'traitsKnown', 'trialUntil', 'shifts']) delete e[k]
+        for (const k of ['skills', 'traits', 'traitsKnown', 'trialUntil', 'shifts', 'fatigue']) delete e[k]
       }
     for (const b of old.businesses as unknown as Record<string, unknown>[]) delete b.hours
     for (const b of old.businesses)
@@ -84,8 +84,8 @@ describe('messages', () => {
         delete p.auto
       }
     const migrated = migrate(old as unknown as GameState)!
-    expect(migrated.version).toBe(9)
-    expect(migrated.inbox).toHaveLength(4)
+    expect(migrated.version).toBe(10)
+    expect(migrated.inbox).toHaveLength(5)
     expect(migrated.objectivesDone).toContain('open_first')
     expect(migrated.businesses[0].rentMult).toBe(1)
     expect(migrated.businesses[0].products.map(stockOf)).toEqual(stockBefore)
@@ -95,6 +95,7 @@ describe('messages', () => {
     expect(e.skills.service).toBe(60)
     expect(e.traits).toHaveLength(2)
     expect(e.shifts).toHaveLength(2)
+    expect(e.fatigue).toBe(0)
     expect(migrated.businesses[0].hours).toEqual([true, true, true])
     expect(() => tick(migrated)).not.toThrow()
   })

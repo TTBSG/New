@@ -23,6 +23,7 @@ const worker = (over: Partial<Employee>): Employee => ({
   hiredDay: 1,
   trialUntil: 0,
   shifts: [0, 1],
+  fatigue: 0,
   ...over,
 })
 

@@ -151,7 +151,9 @@ export interface OrderRecord extends Order {
 export type SkillId = 'service' | 'vente' | 'qualite'
 export type Skills = Record<SkillId, number>
 
-export type TraitId = 'rapide' | 'souriant' | 'vendeur' | 'fiable' | 'ambitieux' | 'mentor' | 'raleur' | 'distrait' | 'paresseux'
+export type TraitId = 'rapide' | 'souriant' | 'vendeur' | 'fiable' | 'ambitieux' | 'mentor' | 'endurant' | 'raleur' | 'distrait' | 'paresseux' | 'fragile'
+
+export type AbsenceReason = 'maladie' | 'formation' | 'conges'
 
 /** Créneaux de la journée : matin, midi / après-midi, soir. */
 export type Slot = 0 | 1 | 2
@@ -174,6 +176,12 @@ export interface Employee {
   trialUntil: number
   /** Créneaux travaillés : 1 = temps partiel, 2 = temps plein, 3 = heures sup. */
   shifts: Slot[]
+  /** Fatigue 0-100 : monte avec les heures sup et les rushs, baisse avec le repos. */
+  fatigue: number
+  /** Absence en cours (jusqu'au jour `until` inclus). */
+  absence?: { reason: AbsenceReason; until: number; skill?: keyof Skills }
+  /** Promu chef d'équipe. */
+  chef?: boolean
 }
 
 export interface DayReport {
@@ -268,7 +276,9 @@ export interface Choice {
   tone?: 'good' | 'bad'
 }
 
-export type ConversationKind = 'advisor' | 'raise' | 'supplier' | 'landlord' | 'press' | 'bank'
+export type ConversationKind = 'advisor' | 'raise' | 'supplier' | 'landlord' | 'press' | 'bank' | 'staff'
+
+export type StaffTopic = 'conges' | 'promotion' | 'conflit' | 'mentor'
 
 /** Une discussion de l'appli Messages. Les choix en attente sont les décisions à prendre. */
 export interface Conversation {
@@ -278,6 +288,9 @@ export interface Conversation {
   role: string
   businessId?: string
   employeeId?: string
+  /** Second employé concerné (conflit, parrainage). */
+  otherId?: string
+  topic?: StaffTopic
   productId?: string
   /** Montant en jeu (salaire demandé, prix de l'offre…). */
   amount?: number
@@ -311,6 +324,10 @@ export interface HqPolicies {
   autoNegotiate: boolean
   /** Ajuster chaque semaine les stocks cibles des produits qui ne périment pas (acheteur). */
   autoStock: boolean
+  /** Avantages sociaux gérés par le responsable RH. */
+  mutuelle: boolean
+  tickets: boolean
+  prime: boolean
 }
 
 export interface Headquarters {

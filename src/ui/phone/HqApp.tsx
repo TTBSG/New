@@ -20,6 +20,7 @@ import {
   startingReputation,
   upgradeHq,
 } from '../../game/hq'
+import { BENEFITS, benefitsPerEmployee, type BenefitId } from '../../game/staff'
 import type { GameState, OfficeRole } from '../../game/types'
 import { Meter, Section, Stat } from '../common'
 import { eur } from '../format'
@@ -237,6 +238,7 @@ function Rule({ title, text, need, state, children }: { title: string; text: str
 
 function Delegation({ state, act }: { state: GameState; act: Act }) {
   const p = state.hq!.policies
+  const staffTotal = state.businesses.reduce((n, b) => n + b.employees.length, 0)
   return (
     <>
       <p className="muted small">Confiez des tâches à votre siège pour vous concentrer sur l'essentiel. Chaque règle reste désactivable à tout moment.</p>
@@ -254,6 +256,14 @@ function Delegation({ state, act }: { state: GameState; act: Act }) {
             </button>
           ))}
         </div>
+      </Section>
+      <Section title="Avantages sociaux" right={<span className="muted small">{eur(benefitsPerEmployee(state) * staffTotal)}/mois</span>}>
+        {(Object.keys(BENEFITS) as BenefitId[]).map((k) => (
+          <Rule key={k} state={state} need="recruteur" title={`${BENEFITS[k].name} · ${eur(BENEFITS[k].cost)}/employé/mois`} text={BENEFITS[k].text}>
+            <Toggle on={p[k]} disabled={!canDelegate(state, 'recruteur')} onChange={(v) => act(setPolicy, k, v)} />
+          </Rule>
+        ))}
+        <p className="small muted">Pour vos {staffTotal} employés en boutique. Le coût est ajouté aux salaires de chaque commerce.</p>
       </Section>
       <Section title="Achats">
         <Rule state={state} need="acheteur" title="Négocier chaque mois" text="L'acheteur tente d'obtenir une remise auprès de chaque fournisseur que vous utilisez.">

@@ -72,6 +72,10 @@ export function diagnose(s: GameState, b: Business): Insight[] {
   const tired = b.employees.filter((e) => e.morale < 35)
   if (tired.length) out.push({ tone: 'warn', text: `${tired.map((e) => e.name.split(' ')[0]).join(', ')} ${tired.length > 1 ? 'ont' : 'a'} le moral en berne : salaire trop bas ou équipe surchargée. Risque de démission.` })
 
+  const sick = b.employees.filter((e) => e.absence?.reason === 'maladie')
+  if (sick.length) out.push({ tone: 'warn', text: `${sick.map((e) => e.name.split(' ')[0]).join(', ')} ${sick.length > 1 ? 'sont' : 'est'} en arrêt maladie : vérifiez que le planning tient sans ${sick.length > 1 ? 'eux' : 'cette personne'}.` })
+  const exhausted = b.employees.filter((e) => !e.absence && e.fatigue > 65)
+  if (exhausted.length) out.push({ tone: 'warn', text: `${exhausted.map((e) => e.name.split(' ')[0]).join(', ')} ${exhausted.length > 1 ? 'sont épuisés' : 'est épuisé(e)'} : risque d'arrêt maladie. Allégez le planning ou accordez du repos.` })
   const overworked = b.employees.filter((e) => e.shifts.length >= 3 && e.morale < 50)
   if (overworked.length) out.push({ tone: 'warn', text: `${overworked.map((e) => e.name.split(' ')[0]).join(', ')} enchaîne${overworked.length > 1 ? 'nt' : ''} les heures sup et fatigue : un temps partiel en renfort soulagerait l'équipe.` })
 
