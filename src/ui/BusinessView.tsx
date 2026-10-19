@@ -1,9 +1,6 @@
 import { useState } from 'react'
 import {
   businessValue,
-  fairSalary,
-  fire,
-  hire,
   monthlyWages,
   perceivedPrice,
   sellBusiness,
@@ -11,8 +8,6 @@ import {
   setMarketing,
   setPrice,
   setRestockTarget,
-  setSalary,
-  severance,
   stockValue,
 } from '../game/engine'
 import { expiringToday, productDef, stockOf } from '../game/stock'
@@ -24,6 +19,7 @@ import type { Business, GameState, ProductState } from '../game/types'
 import { BarChart, Meter, NumberField, Section, Stat } from './common'
 import { TIER_LABEL, dayLabel, eur, eurCents, num, signed } from './format'
 import { Icon, type IconName } from './icons'
+import { EmployeeCard, HiringPanel } from './staff'
 import type { Act } from './useGame'
 
 const TABS = ['Aperçu', 'Produits', 'Équipe', 'Marketing', 'Finances'] as const
@@ -257,9 +253,7 @@ function ProductCard({ state, b, p, act }: { state: GameState; b: Business; p: P
 }
 
 function Team({ state, b, act }: { state: GameState; b: Business; act: Act }) {
-  const sector = getSector(b.sectorId)
   const last = b.history.at(-1)
-  const candidates = state.candidates.filter((c) => c.sectorId === b.sectorId)
   return (
     <>
       <div className="stats">
@@ -268,58 +262,12 @@ function Team({ state, b, act }: { state: GameState; b: Business; act: Act }) {
       </div>
       <Section title={`Employés (${b.employees.length})`}>
         {b.employees.length === 0 && <p className="muted">Personne pour l'instant.</p>}
-        {b.employees.map((e) => {
-          const role = sector.roles.find((r) => r.id === e.roleId)!
-          const fair = fairSalary(role.baseSalary, e.skill)
-          return (
-            <div key={e.id} className="person">
-              <div className="person-head">
-                <strong>{e.name}</strong>
-                <span className="muted small">{role.name}</span>
-              </div>
-              <div className="person-meters">
-                <span className="small">Compétence {Math.round(e.skill)}</span>
-                <Meter value={e.skill} label="Compétence" />
-                <span className="small">Moral {Math.round(e.morale)}</span>
-                <Meter value={e.morale} label="Moral" />
-              </div>
-              <div className="field">
-                <label>Salaire mensuel (marché ~{eur(fair)})</label>
-                <NumberField value={e.salary} step={50} suffix="€" onChange={(v) => act(setSalary, b.id, e.id, v)} />
-              </div>
-              <button
-                className="btn danger small-btn"
-                onClick={() => confirm(`Licencier ${e.name} ? Indemnité : ${eur(severance(e))}`) && act(fire, b.id, e.id)}
-              >
-                Licencier
-              </button>
-            </div>
-          )
-        })}
-      </Section>
-      <Section title="Candidats" right={<span className="muted small">renouvelés chaque lundi</span>}>
-        {sector.roles.map((role) => (
-          <div key={role.id}>
-            <h4>
-              {role.name} <span className="muted small">{role.capacity > 0 ? `sert ~${role.capacity} clients/j` : '+12 % d\'efficacité pour 5 employés, + moral'}</span>
-            </h4>
-            {candidates
-              .filter((c) => c.roleId === role.id)
-              .map((c) => (
-                <div key={c.id} className="candidate">
-                  <span className="biz-main">
-                    <strong>{c.name}</strong>
-                    <span className="small muted">
-                      compétence {c.skill} · {eur(c.salary)}/mois
-                    </span>
-                  </span>
-                  <button className="btn small-btn" onClick={() => act(hire, b.id, c.id)}>
-                    Embaucher
-                  </button>
-                </div>
-              ))}
-          </div>
+        {b.employees.map((e) => (
+          <EmployeeCard key={e.id} state={state} b={b} e={e} act={act} />
         ))}
+      </Section>
+      <Section title="Recruter">
+        <HiringPanel state={state} b={b} act={act} />
       </Section>
     </>
   )

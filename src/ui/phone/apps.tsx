@@ -1,6 +1,8 @@
 import { getParcel } from '../../game/city'
 import { useRef, useState } from 'react'
-import { businessValue, hire, migrate, monthlyWages, netWorth, serviceCapacity } from '../../game/engine'
+import { businessValue, migrate, monthlyWages, netWorth, serviceCapacity } from '../../game/engine'
+import { interviewsLeft } from '../../game/staff'
+import { HiringPanel } from '../staff'
 import { hqMonthlyCost } from '../../game/hq'
 import { warehouseMonthlyCost } from '../../game/warehouse'
 import { getSector } from '../../game/sectors'
@@ -130,9 +132,10 @@ export function RecrutApp({ state, act }: { state: GameState; act: Act }) {
   if (!state.businesses.length) return <p className="muted center">Ouvrez un commerce pour voir les candidats de son secteur.</p>
   return (
     <>
-      <p className="muted small">Les candidats sont renouvelés chaque lundi. Un bon niveau coûte plus cher, mais sert plus de clients.</p>
+      <p className="muted small">
+        Menez des entretiens pour découvrir le caractère des candidats{interviewsLeft(state) === Infinity ? ' (votre responsable RH s\'en charge)' : ` (${interviewsLeft(state)} possible${interviewsLeft(state) > 1 ? 's' : ''} aujourd'hui)`}.
+      </p>
       {state.businesses.map((b) => {
-        const sector = getSector(b.sectorId)
         const last = b.history.at(-1)
         return (
           <Section
@@ -144,26 +147,7 @@ export function RecrutApp({ state, act }: { state: GameState; act: Act }) {
               </span>
             }
           >
-            {sector.roles.map((role) => (
-              <div key={role.id}>
-                <h4>{role.name}</h4>
-                {state.candidates
-                  .filter((c) => c.sectorId === b.sectorId && c.roleId === role.id)
-                  .map((c) => (
-                    <div key={c.id} className="candidate">
-                      <span className="choice-main">
-                        <strong>{c.name}</strong>
-                        <span className="small muted">
-                          compétence {c.skill} · {eur(c.salary)}/mois
-                        </span>
-                      </span>
-                      <button className="btn small-btn" onClick={() => act(hire, b.id, c.id)}>
-                        Embaucher
-                      </button>
-                    </div>
-                  ))}
-              </div>
-            ))}
+            <HiringPanel state={state} b={b} act={act} />
           </Section>
         )
       })}

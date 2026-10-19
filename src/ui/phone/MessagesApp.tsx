@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { fairSalary } from '../../game/engine'
+import { level } from '../../game/staff'
 import { answer, canAfford, markRead } from '../../game/messages'
 import { getSector } from '../../game/sectors'
 import type { Conversation, GameState } from '../../game/types'
@@ -101,11 +102,11 @@ function ConversationView({ state, act, conv }: { state: GameState; act: Act; co
             </div>
             <div className="info-row">
               <span>Prix du marché</span>
-              <strong>~{eur(fairSalary(getSector(business.sectorId).roles.find((r) => r.id === employee.roleId)!.baseSalary, employee.skill))}</strong>
+              <strong>~{eur(fairSalary(getSector(business.sectorId).roles.find((r) => r.id === employee.roleId)!.baseSalary, level(employee.skills)))}</strong>
             </div>
             <div className="info-row">
               <span>Compétence</span>
-              <strong>{Math.round(employee.skill)}</strong>
+              <strong>{level(employee.skills)}</strong>
             </div>
             <div className="info-row">
               <span>Moral</span>

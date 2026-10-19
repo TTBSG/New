@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { isVacant } from './city'
-import { borrow, hire, migrate, newGame, openBusiness, tick } from './engine'
+import { borrow, migrate, newGame, openBusiness, tick } from './engine'
+import { hireStaff } from './testUtils'
 import { answer } from './messages'
 import { stockOf } from './stock'
 import type { GameState } from './types'
@@ -10,11 +11,7 @@ function cafe(seed = 9): GameState {
   s = borrow(s, 40000)
   const lot = s.city.parcels.find((p) => p.districtId === 'centre' && isVacant(p, s.businesses))!.id
   s = openBusiness(s, 'cafe', lot, 'Test')
-  for (let i = 0; i < 3; i++) {
-    const c = s.candidates.filter((x) => x.sectorId === 'cafe' && x.roleId === 'barista')[0]
-    s = hire(s, s.businesses[0].id, c.id)
-  }
-  return s
+  return hireStaff(s, s.businesses[0].id, 3)
 }
 
 function runUntil(s: GameState, kind: string, max = 400) {
@@ -72,6 +69,11 @@ describe('messages', () => {
     const old = structuredClone(s) as unknown as Record<string, unknown> & { businesses: { products: Record<string, unknown>[] }[] }
     old.version = 2
     for (const k of ['inbox', 'flags', 'hq', 'officeCandidates', 'warehouses', 'suppliers', 'orders', 'orderHistory', 'stats', 'objectivesDone', 'unlockedSectors', 'celebrations']) delete old[k]
+    for (const b of old.businesses as unknown as { employees: Record<string, unknown>[] }[])
+      for (const e of b.employees) {
+        e.skill = 60
+        for (const k of ['skills', 'traits', 'traitsKnown', 'trialUntil']) delete e[k]
+      }
     for (const b of old.businesses)
       for (const p of b.products) {
         p.stock = stockOf(p as never)
@@ -81,13 +83,16 @@ describe('messages', () => {
         delete p.auto
       }
     const migrated = migrate(old as unknown as GameState)!
-    expect(migrated.version).toBe(7)
-    expect(migrated.inbox).toHaveLength(2)
+    expect(migrated.version).toBe(8)
+    expect(migrated.inbox).toHaveLength(3)
     expect(migrated.objectivesDone).toContain('open_first')
     expect(migrated.businesses[0].rentMult).toBe(1)
     expect(migrated.businesses[0].products.map(stockOf)).toEqual(stockBefore)
     const sup = migrated.suppliers.find((x) => x.id === migrated.businesses[0].products[0].supplierId)!
     expect(sup.tier).toBe('premium')
+    const e = migrated.businesses[0].employees[0]
+    expect(e.skills.service).toBe(60)
+    expect(e.traits).toHaveLength(2)
     expect(() => tick(migrated)).not.toThrow()
   })
 })

@@ -146,17 +146,27 @@ export interface OrderRecord extends Order {
   closedDay: number
 }
 
+export type SkillId = 'service' | 'vente' | 'qualite'
+export type Skills = Record<SkillId, number>
+
+export type TraitId = 'rapide' | 'souriant' | 'vendeur' | 'fiable' | 'ambitieux' | 'mentor' | 'raleur' | 'distrait' | 'paresseux'
+
 export interface Employee {
   id: string
   name: string
   roleId: string
-  /** Compétence 0-100. */
-  skill: number
+  /** Compétences 0-100 : service (vitesse), vente (panier moyen), qualité (réputation). */
+  skills: Skills
+  /** Deux traits de caractère, découverts en entretien ou avec le temps. */
+  traits: TraitId[]
+  traitsKnown: boolean
   /** Salaire mensuel. */
   salary: number
   /** Moral 0-100. */
   morale: number
   hiredDay: number
+  /** Fin de la période d'essai (on peut s'en séparer sans indemnité jusque-là). */
+  trialUntil: number
 }
 
 export interface DayReport {
@@ -198,8 +208,21 @@ export interface Business {
   history: DayReport[]
 }
 
-export interface Candidate extends Omit<Employee, 'morale' | 'hiredDay'> {
+export type HiringSource = 'spontane' | 'annonce' | 'cabinet'
+
+export interface Candidate {
+  id: string
+  name: string
   sectorId: SectorId
+  roleId: string
+  skills: Skills
+  traits: TraitId[]
+  traitsKnown: boolean
+  /** Salaire demandé. */
+  salary: number
+  source: HiringSource
+  /** Dernier jour où le candidat est disponible. */
+  expiresDay: number
 }
 
 export interface MarketEvent {
@@ -339,6 +362,8 @@ export interface GameState {
   orderHistory: OrderRecord[]
   businesses: Business[]
   candidates: Candidate[]
+  /** Entretiens déjà menés aujourd'hui par le dirigeant. */
+  interviews: { day: number; count: number }
   log: LogEntry[]
   inbox: Conversation[]
   /** Conseils déjà envoyés, étapes du tutoriel… */

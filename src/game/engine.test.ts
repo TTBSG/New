@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { isVacant } from './city'
-import { borrow, fire, hire, newGame, openBusiness, repay, setPrice, tick } from './engine'
+import { borrow, fire, newGame, openBusiness, repay, setPrice, tick } from './engine'
 import { SECTORS } from './sectors'
+import { hireStaff } from './testUtils'
 import type { GameState } from './types'
 
 function run(s: GameState, days: number) {
@@ -19,14 +20,7 @@ function staffed(sectorId: string, districtId: string, staff: number, seed = 42)
   s = { ...s, unlockedSectors: SECTORS.map((x) => x.id) }
   s = borrow(s, 100000)
   s = openBusiness(s, sectorId, lotIn(s, districtId), 'Test')
-  const b = s.businesses[0]
-  const sector = SECTORS.find((x) => x.id === sectorId)!
-  const serviceRole = sector.roles.find((r) => r.capacity > 0)!
-  for (let i = 0; i < staff; i++) {
-    const c = s.candidates.filter((x) => x.sectorId === sectorId && x.roleId === serviceRole.id).sort((a, z) => z.skill - a.skill)[0]
-    s = hire(s, b.id, c.id)
-  }
-  return s
+  return hireStaff(s, s.businesses[0].id, staff)
 }
 
 const monthlyProfit = (s: GameState) => s.businesses[0].history.slice(-30).reduce((a, r) => a + r.profit, 0)
@@ -61,7 +55,9 @@ describe('moteur', () => {
   })
 
   it('le licenciement coûte une indemnité', () => {
-    const s = staffed('cafe', 'residentiel', 1)
+    let s = staffed('cafe', 'residentiel', 1)
+    // Après la période d'essai.
+    for (let i = 0; i < 15; i++) s = tick(s)
     const after = fire(s, s.businesses[0].id, s.businesses[0].employees[0].id)
     expect(after.cash).toBeLessThan(s.cash)
     expect(after.businesses[0].employees).toHaveLength(0)

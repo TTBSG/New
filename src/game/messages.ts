@@ -3,16 +3,14 @@ import { HQ_RANK, SHOPS_WITHOUT_HQ, canDelegate } from './hq'
 import { currentRank } from './objectives'
 import { getSector } from './sectors'
 import { addBatch, updateAvgCost } from './stock'
+import { fairSalary, level } from './staff'
 import type { Business, Choice, Conversation, ConversationKind, Employee, GameState } from './types'
 import { clamp, log, newId, pick, rand, randRange, update } from './util'
 
 const INBOX_SIZE = 40
 const ADVISOR = { contact: 'Camille Roux', role: 'Conseillère en gestion' }
 
-/** Salaire attendu sur le marché pour un niveau de compétence donné. */
-export function fairSalary(baseSalary: number, skill: number): number {
-  return baseSalary * (0.8 + skill / 160)
-}
+export { fairSalary }
 
 const roundTo = (v: number, step: number) => Math.round(v / step) * step
 const eur = (v: number) => `${Math.round(v).toLocaleString('fr-FR')} €`
@@ -113,7 +111,7 @@ function adviceFor(s: GameState, b: Business) {
 function maybeRaiseRequest(s: GameState, b: Business) {
   for (const e of b.employees) {
     if (s.day - e.hiredDay < 28 || pending(s, 'raise', { employeeId: e.id })) continue
-    const fair = fairSalary(roleOf(b, e).baseSalary, e.skill)
+    const fair = fairSalary(roleOf(b, e).baseSalary, level(e.skills))
     if (e.salary >= fair * 0.98 || rand(s) > 0.025) continue
     const asked = roundTo(fair * 1.06, 10)
     const counter = roundTo(fair, 10)

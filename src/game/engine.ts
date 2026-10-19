@@ -1,18 +1,19 @@
-import { advisorMessage, dailyMessages, fairSalary, welcomeMessage } from './messages'
+import { advisorMessage, dailyMessages, welcomeMessage } from './messages'
+import { employeeFromCandidate, employeesDay, fairSalary, level, migrateEmployee, refreshCandidates as refreshStaffCandidates, capacityMult, salesFactor, serviceQuality, TRIAL_DAYS } from './staff'
 import { STARTING_SECTORS, checkObjectives, currentRank, isSectorUnlocked, setNetWorth } from './objectives'
 import { generateCity, getParcel, isFree, parcelRent, parcelTraffic } from './city'
-import { canDelegate, loanRateCut, marketingBoost, maxBusinesses, payHq, recruitingBoost, refreshOfficeCandidates, startingReputation } from './hq'
-import { FIRST_NAMES, LAST_NAMES, RANDOM_EVENTS, SECTORS, getSector } from './sectors'
+import { canDelegate, loanRateCut, marketingBoost, maxBusinesses, payHq, refreshOfficeCandidates, startingReputation } from './hq'
+import { RANDOM_EVENTS, SECTORS, getSector } from './sectors'
 import { addBatch, productDef, stockOf, takeStock } from './stock'
 import { warehouseDay } from './warehouse'
 import { SUPPLIERS_RANK, canNegotiate, closeDay, costOf, dailySupply, defaultSupplier, getSupplier, tryNegotiate, generateSuppliers, productQuality, receiveDeliveries, sectorSuppliers, unitCost } from './supply'
-import type { Business, Candidate, DayReport, Employee, GameState, ProductState } from './types'
+import type { Business, DayReport, Employee, GameState, ProductState } from './types'
 import { clamp, log, newId, pick, rand, randRange, round2, update } from './util'
 
 export { rand }
 export { fairSalary, unitCost }
 
-export const SAVE_VERSION = 7
+export const SAVE_VERSION = 8
 export const START_CASH = 60000
 const HISTORY_DAYS = 120
 const BANKRUPTCY_DAYS = 30
@@ -51,7 +52,7 @@ export function serviceCapacity(b: Business): number {
     const role = sector.roles.find((r) => r.id === e.roleId)!
     if (role.capacity > 0) {
       staff++
-      cap += role.capacity * (0.7 + e.skill / 170) * (0.8 + e.morale / 250)
+      cap += role.capacity * (0.7 + e.skills.service / 170) * (0.8 + e.morale / 250) * capacityMult(e)
     } else {
       managers++
     }
@@ -123,6 +124,7 @@ export function newGame(seed = Date.now() % 2147483647): GameState {
     orderHistory: [],
     businesses: [],
     candidates: [],
+    interviews: { day: 0, count: 0 },
     log: [],
     inbox: [],
     flags: {},
@@ -140,28 +142,8 @@ export function newGame(seed = Date.now() % 2147483647): GameState {
   return s
 }
 
-function makeCandidate(s: GameState, sectorId: string, roleId: string): Candidate {
-  const role = getSector(sectorId).roles.find((r) => r.id === roleId)!
-  const skill = Math.min(100, Math.round(randRange(s, 15, 92)) + recruitingBoost(s))
-  const salary = Math.round((fairSalary(role.baseSalary, skill) * randRange(s, 0.95, 1.05)) / 10) * 10
-  return {
-    id: newId(s, 'c'),
-    name: `${pick(s, FIRST_NAMES)} ${pick(s, LAST_NAMES)}`,
-    sectorId,
-    roleId,
-    skill,
-    salary,
-  }
-}
-
 function refreshCandidates(s: GameState) {
-  s.candidates = []
-  for (const sector of SECTORS) {
-    for (const role of sector.roles) {
-      const count = role.capacity > 0 ? 4 : 2
-      for (let i = 0; i < count; i++) s.candidates.push(makeCandidate(s, sector.id, role.id))
-    }
-  }
+  refreshStaffCandidates(s)
   refreshOfficeCandidates(s)
 }
 
@@ -190,12 +172,13 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
       randRange(s, 0.9, 1.1),
   )
 
-  // Demande par produit selon le prix et la qualité perçue.
+  // Demande par produit selon le prix, la qualité perçue et le talent de vendeur de l'équipe.
+  const upsell = salesFactor(b.employees.filter((e) => sector.roles.find((r) => r.id === e.roleId)!.capacity > 0))
   const demands = b.products.map((p) => {
     const def = sector.products.find((x) => x.id === p.id)!
     const ref = perceivedPrice(s, b.sectorId, p)
     const priceFactor = Math.min(2.5, (ref / Math.max(0.01, p.price)) ** sector.priceElasticity)
-    return visitors * def.baseShare * priceFactor
+    return visitors * def.baseShare * priceFactor * upsell
   })
   const totalDemand = demands.reduce((a, x) => a + x, 0)
   const capacity = serviceCapacity(b)
@@ -225,14 +208,14 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
   if (totalDemand > 0) {
     const avgQuality = qualitySum / totalDemand
     const avgPriceRatio = priceRatioSum / totalDemand
-    const avgSkill = b.employees.length ? b.employees.reduce((a, e) => a + e.skill, 0) / b.employees.length : 0
+    const quality = serviceQuality(b.employees)
     const target =
       50 +
       (avgQuality - 60) * 0.8 -
       (avgPriceRatio - 1) * 40 -
       (lostToCapacity / totalDemand) * 50 -
       (lostToStockout / totalDemand) * 50 +
-      (avgSkill - 50) * 0.2
+      (quality - 50) * 0.25
     b.reputation = clamp(b.reputation + (clamp(target, 0, 100) - b.reputation) * 0.04, 0, 100)
   }
 
@@ -248,24 +231,7 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
 
   // Évolution des employés.
   const load = capacity > 0 ? totalDemand / capacity : 0
-  const hasManager = b.employees.some((e) => sector.roles.find((r) => r.id === e.roleId)!.capacity === 0)
-  const quits: Employee[] = []
-  b.employees = b.employees.filter((e) => {
-    const role = sector.roles.find((r) => r.id === e.roleId)!
-    e.skill = Math.min(100, e.skill + 0.04)
-    const moraleTarget = clamp(
-      55 + (e.salary / fairSalary(role.baseSalary, e.skill) - 1) * 150 - Math.min(30, Math.max(0, load - 1) * 25) + (hasManager ? 10 : 0),
-      0,
-      100,
-    )
-    e.morale = clamp(e.morale + (moraleTarget - e.morale) * 0.05, 0, 100)
-    if (e.morale < 20 && rand(s) < 0.015) {
-      log(s, `${e.name} a démissionné de ${b.name} (moral trop bas).`, 'bad')
-      quits.push(e)
-      return false
-    }
-    return true
-  })
+  const quits = employeesDay(s, b, load)
   for (const e of quits) autoReplace(s, b, e)
 
   const report: DayReport = {
@@ -299,11 +265,11 @@ function autoReplace(s: GameState, b: Business, gone: Employee) {
   if (!s.hq?.policies.autoReplace || !canDelegate(s, 'recruteur')) return
   const role = getSector(b.sectorId).roles.find((r) => r.id === gone.roleId)!
   const c = s.candidates
-    .filter((x) => x.sectorId === b.sectorId && x.roleId === gone.roleId && x.salary <= fairSalary(role.baseSalary, x.skill) * 1.05)
-    .sort((x, y) => y.skill - x.skill)[0]
+    .filter((x) => x.sectorId === b.sectorId && x.roleId === gone.roleId && x.salary <= fairSalary(role.baseSalary, level(x.skills)) * 1.05)
+    .sort((x, y) => level(y.skills) - level(x.skills))[0]
   if (!c) return
   s.candidates = s.candidates.filter((x) => x.id !== c.id)
-  b.employees.push({ id: c.id, name: c.name, roleId: c.roleId, skill: c.skill, salary: c.salary, morale: 65, hiredDay: s.day })
+  b.employees.push(employeeFromCandidate(s, c))
   log(s, `Le siège a recruté ${c.name} pour remplacer ${gone.name} chez ${b.name}.`)
 }
 
@@ -471,26 +437,30 @@ export function hire(state: GameState, businessId: string, candidateId: string):
   if (!c || !target || c.sectorId !== target.sectorId) return state
   return withBusiness(state, businessId, (s, b) => {
     s.candidates = s.candidates.filter((x) => x.id !== candidateId)
-    const e: Employee = { id: c.id, name: c.name, roleId: c.roleId, skill: c.skill, salary: c.salary, morale: 65, hiredDay: s.day }
+    const e = employeeFromCandidate(s, c)
     b.employees.push(e)
     log(s, `${e.name} rejoint ${b.name}.`)
     progress(s)
   })
 }
 
-/** Indemnité de licenciement : un demi-mois de salaire. */
-export function severance(e: Employee): number {
-  return Math.round(e.salary / 2)
+export const inTrial = (s: GameState, e: Employee) => s.day <= e.trialUntil
+
+/** Indemnité de licenciement : un demi-mois de salaire, rien pendant la période d'essai. */
+export function severance(e: Employee, s?: GameState): number {
+  return s && inTrial(s, e) ? 0 : Math.round(e.salary / 2)
 }
 
 export function fire(state: GameState, businessId: string, employeeId: string): GameState {
   return withBusiness(state, businessId, (s, b) => {
     const e = b.employees.find((x) => x.id === employeeId)
     if (!e) return
-    s.cash -= severance(e)
+    const trial = inTrial(s, e)
+    s.cash -= severance(e, s)
     b.employees = b.employees.filter((x) => x.id !== employeeId)
-    for (const other of b.employees) other.morale = clamp(other.morale - 4, 0, 100)
-    log(s, `${e.name} a été licencié(e) de ${b.name} (indemnité ${severance(e)} €).`)
+    // Une fin de période d'essai ne choque pas l'équipe ; un licenciement, si.
+    if (!trial) for (const other of b.employees) other.morale = clamp(other.morale - 4, 0, 100)
+    log(s, trial ? `Fin de la période d'essai de ${e.name} chez ${b.name}.` : `${e.name} a été licencié(e) de ${b.name} (indemnité ${severance(e)} €).`)
   })
 }
 
@@ -603,6 +573,17 @@ export function migrate(raw: GameState): GameState | null {
   if (s.version === 6) {
     s.warehouses = []
     s.version = 7
+  }
+  if (s.version === 7) {
+    for (const b of s.businesses) for (const e of b.employees) migrateEmployee(s, e)
+    s.candidates = []
+    s.interviews = { day: 0, count: 0 }
+    refreshCandidates(s)
+    advisorMessage(s, [
+      'Nouveau : vos employés ont désormais trois compétences (service, vente, qualité) et un caractère !',
+      `Pour recruter, passez une annonce ou faites appel à un cabinet, et menez des entretiens pour découvrir le caractère des candidats. Chaque embauche commence par ${TRIAL_DAYS} jours d'essai.`,
+    ])
+    s.version = 8
   }
   return s.version === SAVE_VERSION ? s : null
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { isFree } from './city'
-import { hire, newGame, openBusiness, tick } from './engine'
+import { newGame, openBusiness, tick } from './engine'
+import { hireStaff } from './testUtils'
 import { hireOffice, openHq } from './hq'
 import { stockOf } from './stock'
 import { sectorSuppliers } from './supply'
@@ -21,18 +22,14 @@ const RANK4 = ['open_first', 'hire_first', 'first_sales', 'rep_60', 'two_shops',
 const lots = (s: GameState, d?: string) => s.city.parcels.filter((p) => p.kind === 'lot' && (!d || p.districtId === d) && isFree(s, p))
 
 /** Groupe de `n` commerces d'un secteur, avec siège et directeur logistique. */
-function group(sectorId: string, n: number, seed = 8): GameState {
+function group(sectorId: string, n: number, seed = 8, staff = 2): GameState {
   let s = newGame(seed)
   s = { ...s, cash: 1_000_000, objectivesDone: RANK4, unlockedSectors: ['cafe', 'boulangerie', 'superette', 'restaurant', 'vetements', 'electronique'] }
   s = openHq(s, lots(s, 'affaires')[0].id)
   s = hireOffice(s, s.officeCandidates.find((c) => c.role === 'logisticien')!.id)
   for (let i = 0; i < n; i++) {
     s = openBusiness(s, sectorId, lots(s, i % 2 ? 'centre' : 'residentiel')[0].id, `M${i}`)
-    const b = s.businesses.at(-1)!
-    for (let k = 0; k < 2; k++) {
-      const c = s.candidates.find((x) => x.sectorId === sectorId && x.roleId !== 'manager')
-      if (c) s = hire(s, b.id, c.id)
-    }
+    s = hireStaff(s, s.businesses.at(-1)!.id, staff)
   }
   return s
 }
@@ -45,7 +42,6 @@ function withWarehouse(s: GameState, sectorId: string) {
   return s
 }
 
-const profit = (s: GameState, days: number) => s.businesses.reduce((a, b) => a + b.history.slice(-days).reduce((x, r) => x + r.profit, 0), 0)
 const logistics = (s: GameState, days: number) => s.warehouses.reduce((a, w) => a + w.history.slice(-days).reduce((x, r) => x + r.cost, 0), 0)
 
 describe('entrepôts', () => {
@@ -97,24 +93,29 @@ describe('entrepôts', () => {
   })
 
   it('économie : très rentable en électronique, rentable en supérette, pas pour des cafés', () => {
+    // On compare la marge en % du chiffre d'affaires (indépendante des aléas de fréquentation) au coût logistique.
     const run = (sectorId: string, warehouse: boolean) => {
-      let s = group(sectorId, 4, 12)
+      let s = group(sectorId, 4, 12, 3)
+      for (let i = 0; i < 14; i++) s = tick(s)
       if (warehouse) {
         s = withWarehouse(s, sectorId)
         const w = warehouseOf(s, sectorId)!
-        // Fournisseur gros volume et une semaine de ventes en stock, comme le conseille l'appli.
         const bulk = sectorSuppliers(s, sectorId).find((x) => x.tier === 'bulk')!
-        for (let i = 0; i < 14; i++) s = tick(s)
+        // Fournisseur gros volume et deux semaines de ventes en stock.
         for (const p of w.products) s = setWarehouseProduct(s, w.id, p.id, { supplierId: bulk.id, restockTarget: suggestedTarget(s, warehouseOf(s, sectorId)!, p.id) * 2 })
-      } else for (let i = 0; i < 14; i++) s = tick(s)
+      }
       for (let i = 0; i < 60; i++) s = tick(s)
-      return profit(s, 30) - logistics(s, 30)
+      const days = s.businesses.flatMap((b) => b.history.slice(-30))
+      const revenue = days.reduce((a, r) => a + r.revenue, 0)
+      return { revenue, marginRate: days.reduce((a, r) => a + r.grossMargin, 0) / revenue, logistics: logistics(s, 30) }
     }
-    const electroGain = run('electronique', true) - run('electronique', false)
-    const superetteGain = run('superette', true) - run('superette', false)
-    const cafeGain = run('cafe', true) - run('cafe', false)
-    expect(electroGain).toBeGreaterThan(3000)
-    expect(superetteGain).toBeGreaterThan(0)
-    expect(cafeGain).toBeLessThan(0)
+    const gain = (sectorId: string) => {
+      const without = run(sectorId, false)
+      const withW = run(sectorId, true)
+      return (withW.marginRate - without.marginRate) * withW.revenue - withW.logistics
+    }
+    expect(gain('electronique')).toBeGreaterThan(3000)
+    expect(gain('superette')).toBeGreaterThan(0)
+    expect(gain('cafe')).toBeLessThan(0)
   })
 })
