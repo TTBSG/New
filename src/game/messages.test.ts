@@ -68,7 +68,7 @@ describe('messages', () => {
     // Reconstitue le format de l'époque : stock simple, gamme de fournisseur, pas de messagerie ni de fournisseurs.
     const old = structuredClone(s) as unknown as Record<string, unknown> & { businesses: { products: Record<string, unknown>[] }[] }
     old.version = 2
-    for (const k of ['inbox', 'flags', 'hq', 'officeCandidates', 'warehouses', 'suppliers', 'orders', 'orderHistory', 'stats', 'objectivesDone', 'unlockedSectors', 'celebrations']) delete old[k]
+    for (const k of ['inbox', 'flags', 'hq', 'officeCandidates', 'warehouses', 'suppliers', 'orders', 'orderHistory', 'stats', 'objectivesDone', 'unlockedSectors', 'celebrations', 'rivals']) delete old[k]
     for (const b of old.businesses as unknown as { employees: Record<string, unknown>[] }[])
       for (const e of b.employees) {
         e.skill = 60
@@ -84,8 +84,9 @@ describe('messages', () => {
         delete p.auto
       }
     const migrated = migrate(old as unknown as GameState)!
-    expect(migrated.version).toBe(10)
-    expect(migrated.inbox).toHaveLength(5)
+    expect(migrated.version).toBe(11)
+    expect(migrated.inbox).toHaveLength(6)
+    expect(migrated.rivals.length).toBeGreaterThan(0)
     expect(migrated.objectivesDone).toContain('open_first')
     expect(migrated.businesses[0].rentMult).toBe(1)
     expect(migrated.businesses[0].products.map(stockOf)).toEqual(stockBefore)

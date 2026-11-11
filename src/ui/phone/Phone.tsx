@@ -14,11 +14,12 @@ import { HqApp } from './HqApp'
 import { HQ_RANK } from '../../game/hq'
 import { WAREHOUSE_RANK } from '../../game/warehouse'
 import { LogisticsApp } from './LogisticsApp'
+import { MarketApp } from './MarketApp'
 import { SUPPLIERS_RANK } from '../../game/supply'
 import { activeObjectives, currentRank, rankTitle } from '../../game/objectives'
 import { Meter } from '../common'
 
-export type AppId = 'messages' | 'commerces' | 'banque' | 'compta' | 'recrut' | 'actus' | 'reglages' | 'objectifs' | 'avenir' | 'fournisseurs' | 'siege' | 'logistique'
+export type AppId = 'messages' | 'commerces' | 'banque' | 'compta' | 'recrut' | 'actus' | 'reglages' | 'objectifs' | 'avenir' | 'fournisseurs' | 'siege' | 'logistique' | 'marche'
 
 export interface PhoneRoute {
   app: AppId | null
@@ -48,9 +49,10 @@ const APPS: Record<AppId, AppDef> = {
   avenir: { id: 'avenir', name: 'À venir', icon: 'lock', color: '#b08f80' },
   fournisseurs: { id: 'fournisseurs', name: 'Fournisseurs', icon: 'box', color: '#5c8de8', minRank: SUPPLIERS_RANK },
   siege: { id: 'siege', name: 'Siège', icon: 'tower', color: '#3d4f7c', minRank: HQ_RANK },
+  marche: { id: 'marche', name: 'Marché', icon: 'trendUp', color: '#b8264f' },
   logistique: { id: 'logistique', name: 'Logistique', icon: 'truck', color: '#6b7280', minRank: WAREHOUSE_RANK },
 }
-const GRID: AppId[] = ['objectifs', 'siege', 'fournisseurs', 'logistique', 'compta', 'recrut', 'actus', 'reglages']
+const GRID: AppId[] = ['objectifs', 'marche', 'siege', 'fournisseurs', 'logistique', 'compta', 'recrut', 'actus', 'reglages']
 const DOCK: AppId[] = ['messages', 'commerces', 'banque']
 /** Applis des prochaines mises à jour, affichées verrouillées pour montrer la progression. */
 const LOCKED: { name: string; icon: IconName; rank: number; text: string }[] = [
@@ -163,6 +165,9 @@ export function Phone({
       break
     case 'fournisseurs':
       content = <SuppliersApp state={state} act={act} />
+      break
+    case 'marche':
+      content = <MarketApp state={state} />
       break
     case 'avenir':
       content = <ComingSoon rank={currentRank(state)} />

@@ -114,7 +114,7 @@ export function ObjectiveBanner({ c, inPhone }: { c: Celebration; inPhone: boole
         <Icon name="check" size={16} />
       </span>
       <span className="choice-main">
-        <span className="small muted">Objectif atteint</span>
+        <span className="small muted">{c.label ?? "Objectif atteint"}</span>
         <strong className="small">{c.title}</strong>
       </span>
       {c.prime > 0 && <strong className="good small">+{eur(c.prime)}</strong>}

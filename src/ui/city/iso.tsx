@@ -116,13 +116,33 @@ export const ParcelObject = memo(function ParcelObject({
   shopSectorId,
   hqHeight,
   warehouse,
+  rivalColor,
 }: {
   parcel: Parcel
   shopSectorId?: string
   hqHeight?: number
   warehouse?: { sectorId: string; height: number }
+  /** Couleur de l'enseigne concurrente installée ici. */
+  rivalColor?: string
 }) {
   const { i, j, districtId, kind, height, variant } = parcel
+
+  if (rivalColor && !shopSectorId) {
+    // Boutique concurrente : façade sombre, bandeau uni aux couleurs de l'enseigne et fanion sur le toit.
+    const inset = 0.14
+    const h = SHOP_HEIGHT + 4
+    const [x, y] = P(i + 0.5, j + 0.5, h)
+    return (
+      <g data-parcel={parcel.id}>
+        <Box i={i} j={j} h={h} color="#5a5f6e" inset={inset} roof={shade(rivalColor, 0.75)} />
+        <polygon points={pts([frontPoint(i, j, inset, 0.1, 3), frontPoint(i, j, inset, 0.55, 3), frontPoint(i, j, inset, 0.55, h * 0.42), frontPoint(i, j, inset, 0.1, h * 0.42)])} fill="#cfe6f2" />
+        <polygon points={pts([frontPoint(i, j, inset, 0.66, 0), frontPoint(i, j, inset, 0.86, 0), frontPoint(i, j, inset, 0.86, h * 0.4), frontPoint(i, j, inset, 0.66, h * 0.4)])} fill="#3a3e4a" />
+        <polygon points={pts([frontPoint(i, j, inset, 0, h * 0.7), frontPoint(i, j, inset, 1, h * 0.7), frontPoint(i, j, inset, 1, h * 0.5), frontPoint(i, j, inset, 0, h * 0.5)])} fill={rivalColor} />
+        <rect x={x - 0.8} y={y - 16} width={1.6} height={16} fill="#3b2f2a" />
+        <path d={`M${x + 0.8},${y - 16} l11,3.5 l-11,3.5z`} fill={rivalColor} />
+      </g>
+    )
+  }
 
   if (warehouse) {
     // Entrepôt : grand hangar bas, porte de quai et bande aux couleurs du secteur.

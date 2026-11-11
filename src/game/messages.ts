@@ -1,6 +1,8 @@
 import { getParcel, parcelRent } from './city'
 import { HQ_RANK, SHOPS_WITHOUT_HQ, canDelegate } from './hq'
 import { currentRank } from './objectives'
+import { getBrand, victimsOf } from './rivals'
+import { autoReplace } from './replace'
 import { getSector } from './sectors'
 import { addBatch, updateAvgCost } from './stock'
 import { TRAITS, applyPromotion, fairSalary, has, level, promotionBlock } from './staff'
@@ -158,6 +160,27 @@ function maybeStaffStory(s: GameState, b: Business) {
   const present = b.employees.filter((e) => !e.absence)
   const who = (e: Employee) => ({ contact: e.name, role: `${roleOf(b, e).name} · ${b.name}` })
   const ask = (e: Employee, lines: string[], extra: Partial<Conversation>) => send(s, 'staff', who(e), lines, { businessId: b.id, employeeId: e.id, ...extra })
+
+  // Un concurrent voisin tente de débaucher un bon élément.
+  const poacher = s.rivals.find((r) => victimsOf(s, r).some((x) => x.id === b.id))
+  const targets = present.filter((e) => level(e.skills) >= 55 && s.day > e.trialUntil)
+  if (poacher && targets.length && rand(s) < 1 / 50) {
+    const e = pick(s, targets)
+    const brand = getBrand(poacher.brandId).name
+    const offer = roundTo(Math.max(e.salary * 1.12, fairSalary(roleOf(b, e).baseSalary, level(e.skills)) * 1.05), 10)
+    ask(e, [`Il faut que je vous dise : ${brand} m'a contacté(e).`, `Ils me proposent ${eur(offer)} par mois pour venir chez eux. J'aime travailler ici, mais c'est tentant…`], {
+      topic: 'debauchage',
+      otherId: poacher.id,
+      amount: offer,
+      expiresDay: s.day + 5,
+      choices: [
+        { id: 'match', label: `« Je m'aligne : ${eur(offer)}. »`, hint: `+${eur(offer - e.salary)}/mois · moral ++`, tone: 'good' },
+        { id: 'talk', label: '« Reste, on a de beaux projets ensemble. »', hint: e.morale >= 60 ? 'bon moral : il/elle devrait rester' : 'moral moyen : résultat incertain' },
+        { id: 'refuse', label: '« Je ne te retiens pas. »', hint: `part chez ${brand}`, tone: 'bad' },
+      ],
+    })
+    return
+  }
 
   // Un ambitieux qui a fait ses preuves veut monter en grade.
   const ambitious = present.filter((e) => has(e, 'ambitieux') && !promotionBlock(s, b, e, 'chef'))
@@ -432,6 +455,25 @@ function staffChoice(s: GameState, b: Business, c: Conversation, choiceId: strin
   const other = b.employees.find((x) => x.id === c.otherId)
   const mood = (x: Employee, v: number) => (x.morale = clamp(x.morale + v, 0, 100))
   switch (c.topic) {
+    case 'debauchage': {
+      const rival = s.rivals.find((r) => r.id === c.otherId)
+      const brand = rival ? getBrand(rival.brandId).name : 'la concurrence'
+      if (choiceId === 'match') {
+        e.salary = Math.max(e.salary, c.amount!)
+        mood(e, 15)
+        return 'Merci, ça me touche. Je reste !'
+      }
+      // Un bon moral retient mieux qu'un discours.
+      if (choiceId === 'talk' && rand(s) < clamp((e.morale - 30) / 50, 0.1, 0.9)) {
+        mood(e, 4)
+        return "Vous avez raison, je suis bien ici. Je décline leur offre."
+      }
+      b.employees = b.employees.filter((x) => x.id !== e.id)
+      if (rival) rival.reputation = clamp(rival.reputation + 3, 0, 100)
+      log(s, `${e.name} quitte ${b.name} pour ${brand}.`, 'bad')
+      autoReplace(s, b, e)
+      return choiceId === 'talk' ? `Désolé(e)… l'offre de ${brand} est trop belle. Je pars.` : 'Très bien. Merci pour tout, et bonne continuation.'
+    }
     case 'promotion':
       if (choiceId === 'accept') {
         if (promotionBlock(s, b, e, 'chef')) return "Ah… finalement ce n'est plus possible."

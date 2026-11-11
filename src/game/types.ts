@@ -209,6 +209,8 @@ export interface DayReport {
   slotCapacity?: number[]
   /** Énergie et charges des créneaux ouverts. */
   utilities?: number
+  /** Part des passants gardée face aux concurrents voisins (1 = aucun concurrent). */
+  competition?: number
 }
 
 export interface Business {
@@ -278,7 +280,7 @@ export interface Choice {
 
 export type ConversationKind = 'advisor' | 'raise' | 'supplier' | 'landlord' | 'press' | 'bank' | 'staff'
 
-export type StaffTopic = 'conges' | 'promotion' | 'conflit' | 'mentor'
+export type StaffTopic = 'conges' | 'promotion' | 'conflit' | 'mentor' | 'debauchage'
 
 /** Une discussion de l'appli Messages. Les choix en attente sont les décisions à prendre. */
 export interface Conversation {
@@ -363,11 +365,32 @@ export interface Warehouse {
 }
 
 /** Célébration à afficher (objectif atteint, nouveau rang). */
+/** Boutique d'une enseigne concurrente installée en ville. */
+export interface RivalShop {
+  id: string
+  brandId: string
+  sectorId: SectorId
+  parcelId: string
+  openedDay: number
+  /** Niveau de prix par rapport au marché (1 = prix de référence). */
+  priceLevel: number
+  /** Qualité des produits 0-100. */
+  quality: number
+  reputation: number
+  /** Santé financière 0-100 : à 0, la boutique ferme. */
+  health: number
+  /** Clients et part de marché locale de la veille. */
+  customers: number
+  share: number
+}
+
 export interface Celebration {
   id: string
   title: string
   prime: number
   rankUp: number | null
+  /** Sur-titre de la bannière (« Objectif atteint » par défaut). */
+  label?: string
 }
 
 export interface GameState {
@@ -392,6 +415,8 @@ export interface GameState {
   orders: Order[]
   orderHistory: OrderRecord[]
   businesses: Business[]
+  /** Boutiques des enseignes concurrentes. */
+  rivals: RivalShop[]
   candidates: Candidate[]
   /** Entretiens déjà menés aujourd'hui par le dirigeant. */
   interviews: { day: number; count: number }

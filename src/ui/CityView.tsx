@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { getParcel, isFree, parcelRent, parcelTraffic } from '../game/city'
 import { HQ_LEVELS, HQ_RANK, hqLevel, hqOpeningCost, hqUnlocked, maxBusinesses, openHq } from '../game/hq'
 import { WAREHOUSE_DISTRICT, canOpenWarehouseHere, openWarehouse, servedShops, warehouseLevel, warehouseOf, warehouseOpeningCost, warehouseStock } from '../game/warehouse'
-import { openBusiness, openingCost, serviceCapacity } from '../game/engine'
+import { businessAttraction, buyRival, buyRivalBlock, openBusiness, openingCost, serviceCapacity } from '../game/engine'
+import { STYLE_NAMES, getBrand, healthLabel, rivalPrice, threatsFor, victimsOf } from '../game/rivals'
 import { isSectorUnlocked, sectorUnlockRank } from '../game/objectives'
 import { SECTORS, getDistrict, getSector } from '../game/sectors'
 import type { GameState } from '../game/types'
-import { CityMap, type Overlay, type WarehouseMark } from './city/CityMap'
+import { CityMap, type Overlay, type RivalMark, type WarehouseMark } from './city/CityMap'
 import { eur, num, signed } from './format'
 import { Icon, type IconName } from './icons'
 import type { Act } from './useGame'
@@ -61,6 +62,25 @@ export function CityView({
         : [],
     [warehouseKey],
   )
+  const rival = parcel ? state.rivals.find((r) => r.parcelId === parcel.id) : undefined
+  const rivalKey = state.rivals.map((r) => `${r.parcelId}:${r.sectorId}:${r.brandId}`).join('|')
+  const rivalMarks = useMemo<RivalMark[]>(
+    () =>
+      rivalKey
+        ? rivalKey.split('|').map((k) => {
+            const [parcelId, sectorId, brandId] = k.split(':')
+            return { parcelId, sectorId, color: getBrand(brandId).color }
+          })
+        : [],
+    [rivalKey],
+  )
+  // Pointillés entre la parcelle sélectionnée et les commerces qui lui disputent ses clients.
+  const linkKey = business
+    ? threatsFor(state, business, businessAttraction(state, business)).map((t) => `${business.parcelId}>${t.rival.parcelId}`).join('|')
+    : rival
+      ? victimsOf(state, rival).map((b) => `${rival.parcelId}>${b.parcelId}`).join('|')
+      : ''
+  const links = useMemo<[string, string][]>(() => (linkKey ? linkKey.split('|').map((k) => k.split('>') as [string, string]) : []), [linkKey])
   const ownedSectors = [...new Set(state.businesses.map((b) => b.sectorId))].filter((id) => !warehouseOf(state, id))
 
   return (
@@ -70,6 +90,8 @@ export function CityView({
         businesses={state.businesses}
         hq={hqOnMap}
         warehouses={warehouseMarks}
+        rivals={rivalMarks}
+        links={links}
         selectedId={selectedId}
         overlay={overlay}
         onSelect={(id) => {
@@ -236,6 +258,8 @@ export function CityView({
             </>
           )}
 
+          {rival && !business && <RivalSheet state={state} act={act} rivalId={rival.id} address={parcel.address} onBought={() => setSelectedId(null)} />}
+
           {warehouse && (
             <>
               <div className="sheet-title">
@@ -328,7 +352,7 @@ export function CityView({
             />
           )}
 
-          {!business && !vacant && !isHq && !warehouse && (
+          {!business && !vacant && !isHq && !warehouse && !rival && (
             <>
               <div className="sheet-title">
                 <span className="sector-badge" style={{ background: '#9a9590' }}>
@@ -347,6 +371,74 @@ export function CityView({
         </div>
       )}
     </div>
+  )
+}
+
+const pctSigned = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(Math.round(v * 100))} %`
+
+function RivalSheet({ state, act, rivalId, address, onBought }: { state: GameState; act: Act; rivalId: string; address: string; onBought: () => void }) {
+  const r = state.rivals.find((x) => x.id === rivalId)!
+  const brand = getBrand(r.brandId)
+  const health = healthLabel(r)
+  const block = buyRivalBlock(state, r.id)
+  const price = rivalPrice(r)
+  const victims = victimsOf(state, r).map((b) => ({ b, taken: threatsFor(state, b, businessAttraction(state, b)).find((t) => t.rival.id === r.id)?.taken ?? 0 }))
+  return (
+    <>
+      <div className="sheet-title">
+        <span className="sector-badge" style={{ background: brand.color }}>
+          <Icon name={r.sectorId as IconName} size={20} />
+        </span>
+        <div>
+          <h3>{brand.name}</h3>
+          <span className="muted small">
+            Concurrent · {getSector(r.sectorId).name} · {address}
+          </span>
+        </div>
+      </div>
+      <div className="tiles">
+        <div className="tile">
+          <strong>{pctSigned(r.priceLevel - 1)}</strong>
+          <small>prix / marché</small>
+        </div>
+        <div className="tile">
+          <strong>
+            <Icon name="star" size={14} className="star" /> {Math.round(r.reputation)}
+          </strong>
+          <small>réputation</small>
+        </div>
+        <div className="tile">
+          <strong>{num(r.customers)}</strong>
+          <small>clients/jour</small>
+        </div>
+      </div>
+      <p className="small">
+        <strong>{STYLE_NAMES[brand.style]}.</strong> {brand.tagline}
+      </p>
+      <p className="small">
+        Santé de la boutique : <strong className={health.tone}>{health.text}</strong>
+        {r.priceLevel < brand.price - 0.001 && <> · en guerre des prix ({pctSigned(r.priceLevel / brand.price - 1)})</>}
+      </p>
+      {victims.map(({ b, taken }) => (
+        <p key={b.id} className="small warn">
+          Détourne environ {Math.round(taken * 100)} % des passants de {b.name}.
+        </p>
+      ))}
+      {!victims.length && <p className="small muted">Aucun de vos commerces n'est assez proche pour être gêné.</p>}
+      <button
+        className="btn primary block"
+        disabled={!!block}
+        onClick={() => {
+          if (confirm(`Racheter cette boutique ${brand.name} pour ${eur(price)} ? Elle deviendra votre commerce, avec sa réputation et deux employés.`)) {
+            act(buyRival, r.id)
+            onBought()
+          }
+        }}
+      >
+        Racheter · {eur(price)}
+      </button>
+      {block && <p className="small muted">{block}.</p>}
+    </>
   )
 }
 

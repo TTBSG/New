@@ -1,21 +1,23 @@
 import { advisorMessage, dailyMessages, welcomeMessage } from './messages'
 import { SLOTS, UTILITIES_RATE, payOf, placeNewcomer, planTeam, slotCapacity, slotShares } from './schedule'
-import { benefitsPerEmployee } from './staff'
-import { employeeFromCandidate, employeesDay, fairSalary, level, migrateEmployee, refreshCandidates as refreshStaffCandidates, salesFactor, serviceQuality, TRIAL_DAYS } from './staff'
-import { STARTING_SECTORS, checkObjectives, currentRank, isSectorUnlocked, setNetWorth } from './objectives'
+import { attraction, competitionFactor, getBrand, rivalName, rivalPrice, rivalsDay, seedRivals, victimsOf } from './rivals'
+import { autoReplace } from './replace'
+import { benefitsPerEmployee, makeCandidate } from './staff'
+import { employeeFromCandidate, employeesDay, fairSalary, migrateEmployee, refreshCandidates as refreshStaffCandidates, salesFactor, serviceQuality, TRIAL_DAYS } from './staff'
+import { STARTING_SECTORS, checkObjectives, currentRank, isSectorUnlocked, sectorUnlockRank, setNetWorth } from './objectives'
 import { generateCity, getParcel, isFree, parcelRent, parcelTraffic } from './city'
 import { canDelegate, loanRateCut, marketingBoost, maxBusinesses, payHq, refreshOfficeCandidates, startingReputation } from './hq'
 import { RANDOM_EVENTS, SECTORS, getSector } from './sectors'
 import { addBatch, productDef, stockOf, takeStock } from './stock'
 import { warehouseDay } from './warehouse'
 import { SUPPLIERS_RANK, canNegotiate, closeDay, costOf, dailySupply, defaultSupplier, getSupplier, tryNegotiate, generateSuppliers, productQuality, receiveDeliveries, sectorSuppliers, unitCost } from './supply'
-import type { Business, DayReport, Employee, GameState, ProductState } from './types'
+import type { Business, DayReport, Employee, GameState, Parcel, ProductState } from './types'
 import { clamp, log, newId, pick, rand, randRange, round2, update } from './util'
 
 export { rand }
 export { fairSalary, unitCost }
 
-export const SAVE_VERSION = 10
+export const SAVE_VERSION = 11
 export const START_CASH = 60000
 const HISTORY_DAYS = 120
 const BANKRUPTCY_DAYS = 30
@@ -46,6 +48,19 @@ export function expectedDemand(traffic: number, sectorId: string, productId: str
 }
 
 /** Clients servables sur la journée (somme des créneaux ouverts). */
+/** Attrait du commerce face à ses concurrents : réputation et prix ressentis par les clients. */
+export function businessAttraction(s: GameState, b: Business): number {
+  const sector = getSector(b.sectorId)
+  let ratio = 0
+  let shares = 0
+  for (const p of b.products) {
+    const share = sector.products.find((x) => x.id === p.id)!.baseShare
+    ratio += (p.price / perceivedPrice(s, b.sectorId, p)) * share
+    shares += share
+  }
+  return attraction(b.reputation, shares > 0 ? ratio / shares : 1)
+}
+
 export function serviceCapacity(b: Business): number {
   return slotCapacity(b).reduce((a, x) => a + x, 0)
 }
@@ -112,6 +127,7 @@ export function newGame(seed = Date.now() % 2147483647): GameState {
     orders: [],
     orderHistory: [],
     businesses: [],
+    rivals: [],
     candidates: [],
     interviews: { day: 0, count: 0 },
     log: [],
@@ -125,6 +141,7 @@ export function newGame(seed = Date.now() % 2147483647): GameState {
   }
   s.city = generateCity(() => rand(s))
   generateSuppliers(s)
+  seedRivals(s)
   refreshCandidates(s)
   welcomeMessage(s)
   log(s, `Bienvenue ! Vous démarrez avec ${START_CASH.toLocaleString('fr-FR')} €. Ouvrez votre première entreprise.`, 'good')
@@ -148,7 +165,10 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
     .reduce((m, e) => m * e.demandMult, 1)
   const marketingFactor = 1 + 0.5 * Math.log10(1 + b.marketingDaily / 10)
   const reputationFactor = 0.6 + b.reputation / 125
+  // Les concurrents du même secteur installés à proximité détournent une partie des passants.
+  const competition = competitionFactor(s, b, businessAttraction(s, b))
   const visitors = Math.round(
+    competition *
     parcelTraffic(parcel) *
       sector.trafficMult *
       WEEKDAY_TRAFFIC[weekday(s.day)] *
@@ -253,6 +273,7 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
     slotDemand: slotDemand.map(Math.round),
     slotCapacity: slotCap.map(Math.round),
     utilities,
+    competition: round2(competition),
   }
   s.stats.totalProfit += report.profit
   s.stats.totalRevenue += report.revenue
@@ -262,22 +283,6 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
 }
 
 /** Délégation : le recruteur du siège remplace un employé parti par le meilleur candidat au prix du marché. */
-function autoReplace(s: GameState, b: Business, gone: Employee) {
-  if (!s.hq?.policies.autoReplace || !canDelegate(s, 'recruteur')) return
-  const role = getSector(b.sectorId).roles.find((r) => r.id === gone.roleId)!
-  const c = s.candidates
-    .filter((x) => x.sectorId === b.sectorId && x.roleId === gone.roleId && x.salary <= fairSalary(role.baseSalary, level(x.skills)) * 1.05)
-    .sort((x, y) => level(y.skills) - level(x.skills))[0]
-  if (!c) return
-  s.candidates = s.candidates.filter((x) => x.id !== c.id)
-  const e = employeeFromCandidate(s, c)
-  const shifts = gone.shifts.filter((slot) => b.hours[slot])
-  if (shifts.length) e.shifts = shifts
-  else placeNewcomer(b, e, gone.shifts.length)
-  b.employees.push(e)
-  log(s, `Le siège a recruté ${c.name} pour remplacer ${gone.name} chez ${b.name}.`)
-}
-
 /** Délégation des achats : négociation mensuelle et ajustement hebdomadaire des stocks cibles. */
 function delegatePurchasing(s: GameState) {
   if (!s.hq || !canDelegate(s, 'acheteur')) return
@@ -330,6 +335,28 @@ function updateMarket(s: GameState) {
   }
 }
 
+/** Ouvertures et fermetures chez les concurrents, avec les annonces qui vont avec. */
+function rivalsMove(s: GameState) {
+  const { closed, opened } = rivalsDay(s, (b) => businessAttraction(s, b))
+  for (const r of closed) {
+    const beaten = victimsOf(s, r).length > 0
+    log(s, `${rivalName(r)} ferme ses portes${beaten ? ' : vous avez gagné la bataille du quartier !' : '.'}`, beaten ? 'good' : 'info')
+    if (beaten) s.celebrations.push({ id: `rival${r.id}`, title: `${getBrand(r.brandId).name} jette l'éponge`, prime: 0, rankUp: null, label: 'Concurrence' })
+  }
+  if (opened) {
+    const parcel = getParcel(s.city, opened.parcelId)
+    const victims = victimsOf(s, opened)
+    log(s, `${rivalName(opened)} ouvre au ${parcel.address}${victims.length ? `, tout près de ${victims[0].name}` : ''}.`, victims.length ? 'bad' : 'info')
+    if (victims.length && !s.flags.rival_hint) {
+      s.flags.rival_hint = true
+      advisorMessage(s, [
+        `Attention, ${getBrand(opened.brandId).name} vient d'ouvrir près de ${victims[0].name} : vous allez vous partager les passants du quartier.`,
+        "Pour garder vos clients, soignez votre réputation et surveillez vos prix. Touchez sa boutique sur la carte pour l'étudier… ou la racheter. L'appli Marché montre vos parts de marché.",
+      ])
+    }
+  }
+}
+
 export function tick(state: GameState): GameState {
   if (state.gameOver) return state
   return update(state, (s) => {
@@ -337,6 +364,7 @@ export function tick(state: GameState): GameState {
     updateMarket(s)
     for (const b of s.businesses) simulateBusiness(s, b)
     for (const w of s.warehouses) warehouseDay(s, w)
+    rivalsMove(s)
 
     payHq(s)
     delegatePurchasing(s)
@@ -367,41 +395,80 @@ export function openBusiness(state: GameState, sectorId: string, parcelId: strin
   const cost = openingCost(state, sectorId, parcelId)
   if (state.cash < cost) return state
   return update(state, (s) => {
-    const sector = getSector(sectorId)
-    const traffic = parcelTraffic(parcel)
     s.cash -= cost
-    const b: Business = {
-      id: newId(s, 'b'),
-      name: name.trim() || `${sector.name} ${parcel.address}`,
-      sectorId,
-      parcelId,
-      openedDay: s.day,
-      employees: [],
-      marketingDaily: 0,
-      reputation: startingReputation(s),
-      rentMult: 1,
-      hours: [true, true, true],
-      history: [],
-      products: sector.products.map((p) => ({
-        id: p.id,
-        price: p.refPrice,
-        batches: [],
-        supplierId: defaultSupplier(s, sectorId).id,
-        restockTarget: defaultTarget(traffic, sectorId, p.id),
-        auto: true,
-      })),
+    const b = createBusiness(s, sectorId, parcel, name, startingReputation(s))
+    log(s, `${b.name} (${getSector(sectorId).name}) ouvre ses portes au ${parcel.address} ! Pensez à recruter du personnel.`, 'good')
+    progress(s)
+  })
+}
+
+/** Crée le commerce sur la parcelle et achète son stock de départ. */
+function createBusiness(s: GameState, sectorId: string, parcel: Parcel, name: string, reputation: number): Business {
+  const sector = getSector(sectorId)
+  const traffic = parcelTraffic(parcel)
+  const b: Business = {
+    id: newId(s, 'b'),
+    name: name.trim() || `${sector.name} ${parcel.address}`,
+    sectorId,
+    parcelId: parcel.id,
+    openedDay: s.day,
+    employees: [],
+    marketingDaily: 0,
+    reputation,
+    rentMult: 1,
+    hours: [true, true, true],
+    history: [],
+    products: sector.products.map((p) => ({
+      id: p.id,
+      price: p.refPrice,
+      batches: [],
+      supplierId: defaultSupplier(s, sectorId).id,
+      restockTarget: defaultTarget(traffic, sectorId, p.id),
+      auto: true,
+    })),
+  }
+  // Stock de départ, livré à l'ouverture.
+  for (const p of b.products) {
+    const c = p.restockTarget * unitCost(s, sectorId, p)
+    if (s.cash >= c) {
+      s.cash -= c
+      p.avgCost = unitCost(s, sectorId, p)
+      addBatch(sectorId, p, p.restockTarget, s.day)
     }
-    // Stock de départ, livré à l'ouverture.
-    for (const p of b.products) {
-      const c = p.restockTarget * unitCost(s, sectorId, p)
-      if (s.cash >= c) {
-        s.cash -= c
-        p.avgCost = unitCost(s, sectorId, p)
-        addBatch(sectorId, p, p.restockTarget, s.day)
-      }
+  }
+  s.businesses.push(b)
+  return b
+}
+
+/** Pourquoi le rachat d'un concurrent est impossible (null = possible). */
+export function buyRivalBlock(s: GameState, rivalId: string): string | null {
+  const r = s.rivals.find((x) => x.id === rivalId)
+  if (!r) return 'Cette boutique a fermé'
+  if (!isSectorUnlocked(s, r.sectorId)) return `Secteur pas encore débloqué (rang ${sectorUnlockRank(r.sectorId) + 1})`
+  if (s.businesses.length >= maxBusinesses(s)) return 'Nombre maximum de commerces atteint'
+  if (s.cash < rivalPrice(r)) return 'Trésorerie insuffisante'
+  return null
+}
+
+/** Rachat d'une boutique concurrente : elle devient la vôtre, avec sa réputation et deux employés en place. */
+export function buyRival(state: GameState, rivalId: string): GameState {
+  if (buyRivalBlock(state, rivalId)) return state
+  return update(state, (s) => {
+    const r = s.rivals.find((x) => x.id === rivalId)!
+    const parcel = getParcel(s.city, r.parcelId)
+    const brand = getBrand(r.brandId)
+    s.cash -= rivalPrice(r)
+    s.rivals = s.rivals.filter((x) => x.id !== rivalId)
+    const b = createBusiness(s, r.sectorId, parcel, `${getSector(r.sectorId).name} ${parcel.address}`, r.reputation)
+    const role = getSector(r.sectorId).roles.find((x) => x.capacity > 0)!
+    for (let i = 0; i < 2; i++) {
+      const e = employeeFromCandidate(s, makeCandidate(s, r.sectorId, role.id, 'spontane'))
+      e.trialUntil = 0
+      placeNewcomer(b, e)
+      b.employees.push(e)
     }
-    s.businesses.push(b)
-    log(s, `${b.name} (${sector.name}) ouvre ses portes au ${parcel.address} ! Pensez à recruter du personnel.`, 'good')
+    log(s, `Vous rachetez la boutique ${brand.name} du ${parcel.address} : elle devient ${b.name}, avec son équipe.`, 'good')
+    s.celebrations.push({ id: `buy${r.id}`, title: `${brand.name} racheté !`, prime: 0, rankUp: null, label: 'Concurrence' })
     progress(s)
   })
 }
@@ -614,6 +681,15 @@ export function migrate(raw: GameState): GameState | null {
         'Surveillez aussi leur fatigue : les heures sup et les rushs les épuisent, et un employé épuisé finit en arrêt maladie. Avec un responsable RH au siège, vous pourrez offrir mutuelle, tickets restaurant et primes.',
       ])
     s.version = 10
+  }
+  if (s.version === 10) {
+    s.rivals = []
+    seedRivals(s)
+    advisorMessage(s, [
+      'Nouveau : vous n\'êtes plus seul en ville ! Des enseignes concurrentes ouvrent des boutiques, se partagent les passants avec les vôtres et cassent leurs prix si vous leur prenez des clients.',
+      'Touchez une boutique concurrente sur la carte pour l\'étudier ou la racheter, et suivez vos parts de marché dans la nouvelle appli Marché.',
+    ])
+    s.version = 11
   }
   return s.version === SAVE_VERSION ? s : null
 }

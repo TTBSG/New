@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import {
+  businessAttraction,
   businessValue,
   monthlyWages,
   perceivedPrice,
@@ -19,6 +20,7 @@ import type { Business, GameState, ProductState } from '../game/types'
 import { BarChart, Meter, NumberField, Section, Stat } from './common'
 import { TIER_LABEL, dayLabel, eur, eurCents, num, signed } from './format'
 import { Icon, type IconName } from './icons'
+import { getBrand, healthLabel, threatsFor } from '../game/rivals'
 import { EmployeeCard, HiringPanel, PlanningPanel } from './staff'
 import type { Act } from './useGame'
 
@@ -86,6 +88,7 @@ function Overview({ state, b, act, onBack }: { state: GameState; b: Business; ac
         <Stat label="CA hier" value={last ? eur(last.revenue) : '—'} />
         <Stat label="Bénéfice hier" value={last ? signed(last.profit) : '—'} tone={last && last.profit < 0 ? 'bad' : 'good'} />
       </div>
+      <Competition state={state} b={b} />
       <Section title="Bénéfice quotidien (30 j)">
         <BarChart values={recent.map((r) => r.profit)} labels={recent.map((r) => `Jour ${r.day}`)} />
       </Section>
@@ -271,6 +274,33 @@ function Team({ state, b, act }: { state: GameState; b: Business; act: Act }) {
         <HiringPanel state={state} b={b} act={act} />
       </Section>
     </>
+  )
+}
+
+function Competition({ state, b }: { state: GameState; b: Business }) {
+  const threats = threatsFor(state, b, businessAttraction(state, b))
+  const kept = 1 - threats.reduce((a, t) => a + t.taken, 0)
+  return (
+    <Section title="Concurrence" right={threats.length ? <span className="muted small">vous gardez {Math.round(kept * 100)} % des passants</span> : undefined}>
+      {!threats.length && <p className="muted small">Aucun concurrent de votre secteur dans le quartier. Profitez-en : le succès finit par attirer les enseignes.</p>}
+      {threats.map((t) => {
+        const brand = getBrand(t.rival.brandId)
+        return (
+          <div key={t.rival.id} className="threat">
+            <span className="brand-dot" style={{ background: brand.color }} />
+            <span className="choice-main">
+              <strong>{brand.name}</strong>
+              <span className="small muted">
+                à {t.distance} rue{t.distance > 1 ? 's' : ''} · prix {t.rival.priceLevel < 1 ? '−' : '+'}
+                {Math.abs(Math.round((t.rival.priceLevel - 1) * 100))} % · réputation {Math.round(t.rival.reputation)} · {healthLabel(t.rival).text.toLowerCase()}
+              </span>
+            </span>
+            <strong className="bad">−{Math.round(t.taken * 100)} %</strong>
+          </div>
+        )
+      })}
+      {threats.length > 0 && <p className="muted small">Touchez leur boutique sur la carte pour l'étudier ou la racheter. Une meilleure réputation et des prix justes vous rendent des passants.</p>}
+    </Section>
   )
 }
 

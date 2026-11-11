@@ -63,18 +63,21 @@ const Ground = memo(function Ground({ city, overlay }: { city: City; overlay: Ov
 })
 
 export type WarehouseMark = { parcelId: string; sectorId: string; height: number; shops: string[] }
+export type RivalMark = { parcelId: string; sectorId: string; color: string }
 
 const Objects = memo(function Objects({
   city,
   shops,
   hq,
   warehouses,
+  rivals,
   faded,
 }: {
   city: City
   shops: Record<string, string>
   hq: { parcelId: string; height: number } | null
   warehouses: WarehouseMark[]
+  rivals: RivalMark[]
   faded: boolean
 }) {
   const sorted = useMemo(() => [...city.parcels].sort((a, b) => a.i + a.j - (b.i + b.j) || a.i - b.i), [city])
@@ -87,6 +90,7 @@ const Objects = memo(function Objects({
           shopSectorId={shops[p.id]}
           hqHeight={hq?.parcelId === p.id ? hq.height : undefined}
           warehouse={warehouses.find((w) => w.parcelId === p.id)}
+          rivalColor={rivals.find((r) => r.parcelId === p.id)?.color}
         />
       ))}
     </g>
@@ -161,6 +165,8 @@ export function CityMap({
   businesses,
   hq,
   warehouses,
+  rivals,
+  links,
   selectedId,
   overlay,
   onSelect,
@@ -169,6 +175,9 @@ export function CityMap({
   businesses: Business[]
   hq: { parcelId: string; height: number } | null
   warehouses: WarehouseMark[]
+  rivals: RivalMark[]
+  /** Commerces en concurrence avec la parcelle sélectionnée : paires de parcelles à relier. */
+  links: [string, string][]
   selectedId: string | null
   overlay: Overlay
   onSelect: (parcelId: string | null) => void
@@ -300,7 +309,12 @@ export function CityMap({
           <g transform={`translate(${view.x.toFixed(1)} ${view.y.toFixed(1)}) scale(${view.k.toFixed(3)})`}>
             <Ground city={city} overlay={overlay} />
             {selected && <polygon points={diamond(selected.i, selected.j, 0.04)} fill="none" stroke="#e8743b" strokeWidth={3} className="sel-ring" />}
-            <Objects city={city} shops={shops} hq={hq} warehouses={warehouses} faded={overlay !== 'none'} />
+            <Objects city={city} shops={shops} hq={hq} warehouses={warehouses} rivals={rivals} faded={overlay !== 'none'} />
+            {links.map(([from, to]) => {
+              const [x1, y1] = P(parcelsById[from].i + 0.5, parcelsById[from].j + 0.5, SHOP_HEIGHT + 6)
+              const [x2, y2] = P(parcelsById[to].i + 0.5, parcelsById[to].j + 0.5, SHOP_HEIGHT + 6)
+              return <line key={`${from}-${to}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#d64545" strokeWidth={3} strokeDasharray="2 7" strokeLinecap="round" className="rival-link" pointerEvents="none" />
+            })}
             {DISTRICT_LABELS.map(([a, b, t]) => {
               const [x, y] = P(a, b)
               return (
@@ -337,6 +351,19 @@ export function CityMap({
                 </g>
               )
             })}
+            {rivals.map((r) => {
+              const p = parcelsById[r.parcelId]
+              if (shops[p.id]) return null
+              const [x, y] = P(p.i + 0.5, p.j + 0.5, SHOP_HEIGHT + 30)
+              return (
+                <g key={r.parcelId} data-parcel={p.id} transform={`translate(${x} ${y})`}>
+                  <g className={selectedId === p.id ? 'pin-bounce' : undefined}>
+                    <circle r={11} fill={r.color} stroke="#fff" strokeWidth={2.5} />
+                    <Icon name={r.sectorId as IconName} size={13} x={-6.5} y={-6.5} color="#fff" strokeWidth={2.2} />
+                  </g>
+                </g>
+              )
+            })}
             {warehouses.map((w) => (
               <Trucks key={w.parcelId} from={parcelsById[w.parcelId]} to={w.shops.map((id) => parcelsById[id]).filter(Boolean)} />
             ))}
@@ -365,7 +392,7 @@ export function CityMap({
                   </g>
                 )
               })()}
-            {selected && !shops[selected.id] && selected.id !== hq?.parcelId && !warehouses.some((w) => w.parcelId === selected.id) && (
+            {selected && !shops[selected.id] && selected.id !== hq?.parcelId && !warehouses.some((w) => w.parcelId === selected.id) && !rivals.some((r) => r.parcelId === selected.id) && (
               <g transform={`translate(${P(selected.i + 0.5, selected.j + 0.5)[0]} ${P(selected.i + 0.5, selected.j + 0.5)[1] - 44})`} pointerEvents="none">
                 <g className="pin-bounce">
                   <path d="M-9 -12 L0 0 L9 -12Z" fill="#e8743b" stroke="#fff" strokeWidth={2} />

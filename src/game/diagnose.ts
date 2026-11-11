@@ -1,5 +1,6 @@
 import { getParcel, parcelRent } from './city'
-import { monthlyWages, perceivedPrice, serviceCapacity } from './engine'
+import { businessAttraction, monthlyWages, perceivedPrice, serviceCapacity } from './engine'
+import { getBrand, rivalAttraction, rivalPriceRatio, threatsFor } from './rivals'
 import { SLOTS, SLOT_NAMES } from './schedule'
 import { stockOf } from './stock'
 import { getSupplier, pendingOrders } from './supply'
@@ -50,6 +51,22 @@ export function diagnose(s: GameState, b: Business): Insight[] {
     const ratio = p.price / perceivedPrice(s, b.sectorId, p)
     if (ratio > 1.2) out.push({ tone: 'warn', text: `« ${def.name} » est jugé trop cher (${eur(p.price)} pour ~${eur(perceivedPrice(s, b.sectorId, p))} attendus) : les clients l'évitent et la réputation baisse.` })
     else if (ratio < 0.8) out.push({ tone: 'warn', text: `Vous bradez « ${def.name} » : vous pourriez le vendre plus cher sans perdre beaucoup de clients.` })
+  }
+
+  const threats = threatsFor(s, b, businessAttraction(s, b))
+  const taken = threats.reduce((a, t) => a + t.taken, 0)
+  if (taken > 0.1) {
+    const top = threats[0].rival
+    const myRatio = b.products.reduce((a, p) => a + p.price / perceivedPrice(s, b.sectorId, p), 0) / b.products.length
+    const why =
+      rivalPriceRatio(top) < myRatio - 0.03
+        ? 'son rapport qualité-prix est meilleur que le vôtre : ajustez vos prix ou montez en qualité'
+        : top.reputation > b.reputation + 3
+          ? 'sa réputation dépasse la vôtre : soignez le service et la qualité'
+          : rivalAttraction(top) < businessAttraction(s, b)
+            ? 'vous êtes mieux placé que lui : tenez bon, il finira par s\'essouffler'
+            : 'gagnez en réputation pour faire la différence'
+    out.push({ tone: taken > 0.2 ? 'bad' : 'warn', text: `La concurrence détourne ${pct(taken)} de vos passants (${[...new Set(threats.map((t) => getBrand(t.rival.brandId).name))].join(', ')}). Face à ${getBrand(top.brandId).name}, ${why}.` })
   }
 
   const wh = s.warehouses.find((w) => w.sectorId === b.sectorId)
