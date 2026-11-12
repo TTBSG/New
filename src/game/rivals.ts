@@ -85,6 +85,11 @@ export function competitionFactor(s: GameState, b: Business, ownAttraction: numb
 
 // ---------- Vie des enseignes ----------
 
+/** Pression des concurrents (tous secteurs) autour d'un emplacement : sert à repérer les zones disputées. */
+export function pressureAt(s: GameState, p: Parcel): number {
+  return s.rivals.reduce((a, r) => a + weight(distance(p, getParcel(s.city, r.parcelId))), 0)
+}
+
 /** Emplacements possibles : immeubles donnant sur une rue (les locaux « à louer » restent pour le joueur). */
 function spots(s: GameState): Parcel[] {
   const used = new Set([...s.rivals.map((r) => r.parcelId), ...s.businesses.map((b) => b.parcelId)])

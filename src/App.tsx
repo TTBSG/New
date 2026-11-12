@@ -123,6 +123,7 @@ export default function App() {
       <CityView
         state={state}
         act={act}
+        running={speed > 0}
         onManage={(businessId) => openPhone({ app: 'commerces', businessId })}
         onHq={() => openPhone({ app: 'siege' })}
         onWarehouse={(warehouseId) => openPhone({ app: 'logistique', warehouseId })}

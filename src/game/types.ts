@@ -249,11 +249,15 @@ export interface Candidate {
   expiresDay: number
 }
 
+export type Weather = 'soleil' | 'nuages' | 'pluie' | 'neige'
+
 export interface MarketEvent {
   id: string
   title: string
   description: string
   sectorId: SectorId | null
+  /** Événement de quartier : seuls les commerces de ce quartier sont touchés. */
+  districtId?: string
   demandMult: number
   endsDay: number
 }
@@ -407,6 +411,7 @@ export interface GameState {
   economy: number
   sectorTrends: Record<SectorId, number>
   events: MarketEvent[]
+  weather: Weather
   city: City
   hq: Headquarters | null
   officeCandidates: OfficeEmployee[]

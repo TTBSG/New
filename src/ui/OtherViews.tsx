@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { borrow, effectiveLoanRate, maxLoan, repay } from '../game/engine'
-import { SECTORS, getSector } from '../game/sectors'
+import { SECTORS, getDistrict, getSector } from '../game/sectors'
 import type { GameState } from '../game/types'
 import { Section, Stat } from './common'
 import { eur } from './format'
@@ -71,7 +71,7 @@ function MarketView({ state }: { state: GameState }) {
         {state.events.length === 0 && <p className="muted">Rien de particulier.</p>}
         {state.events.map((e) => (
           <p key={e.id} className="small">
-            <strong>{e.title}</strong> ({e.sectorId ? getSector(e.sectorId).name : 'tous secteurs'}, {trendLabel(e.demandMult)}, encore {e.endsDay - state.day + 1} j)
+            <strong>{e.title}</strong> ({e.districtId ? getDistrict(e.districtId).name : e.sectorId ? getSector(e.sectorId).name : 'tous secteurs'}, {trendLabel(e.demandMult)}, encore {e.endsDay - state.day + 1} j)
             <br />
             <span className="muted">{e.description}</span>
           </p>

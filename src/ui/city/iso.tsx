@@ -117,6 +117,7 @@ export const ParcelObject = memo(function ParcelObject({
   hqHeight,
   warehouse,
   rivalColor,
+  closed,
 }: {
   parcel: Parcel
   shopSectorId?: string
@@ -124,6 +125,8 @@ export const ParcelObject = memo(function ParcelObject({
   warehouse?: { sectorId: string; height: number }
   /** Couleur de l'enseigne concurrente installée ici. */
   rivalColor?: string
+  /** Commerce fermé sur le créneau affiché : rideau baissé. */
+  closed?: boolean
 }) {
   const { i, j, districtId, kind, height, variant } = parcel
 
@@ -135,7 +138,7 @@ export const ParcelObject = memo(function ParcelObject({
     return (
       <g data-parcel={parcel.id}>
         <Box i={i} j={j} h={h} color="#5a5f6e" inset={inset} roof={shade(rivalColor, 0.75)} />
-        <polygon points={pts([frontPoint(i, j, inset, 0.1, 3), frontPoint(i, j, inset, 0.55, 3), frontPoint(i, j, inset, 0.55, h * 0.42), frontPoint(i, j, inset, 0.1, h * 0.42)])} fill="#cfe6f2" />
+        <polygon points={pts([frontPoint(i, j, inset, 0.1, 3), frontPoint(i, j, inset, 0.55, 3), frontPoint(i, j, inset, 0.55, h * 0.42), frontPoint(i, j, inset, 0.1, h * 0.42)])} fill="#cfe6f2" className="shop-window" />
         <polygon points={pts([frontPoint(i, j, inset, 0.66, 0), frontPoint(i, j, inset, 0.86, 0), frontPoint(i, j, inset, 0.86, h * 0.4), frontPoint(i, j, inset, 0.66, h * 0.4)])} fill="#3a3e4a" />
         <polygon points={pts([frontPoint(i, j, inset, 0, h * 0.7), frontPoint(i, j, inset, 1, h * 0.7), frontPoint(i, j, inset, 1, h * 0.5), frontPoint(i, j, inset, 0, h * 0.5)])} fill={rivalColor} />
         <rect x={x - 0.8} y={y - 16} width={1.6} height={16} fill="#3b2f2a" />
@@ -192,7 +195,11 @@ export const ParcelObject = memo(function ParcelObject({
     return (
       <g data-parcel={parcel.id}>
         <Box i={i} j={j} h={h} color={facade} inset={inset} roof={shade(sector.color, 0.85)} />
-        <polygon points={pts([frontPoint(i, j, inset, 0.1, 3), frontPoint(i, j, inset, 0.55, 3), frontPoint(i, j, inset, 0.55, h * 0.44), frontPoint(i, j, inset, 0.1, h * 0.44)])} fill="#a9dcf5" />
+        <polygon points={pts([frontPoint(i, j, inset, 0.1, 3), frontPoint(i, j, inset, 0.55, 3), frontPoint(i, j, inset, 0.55, h * 0.44), frontPoint(i, j, inset, 0.1, h * 0.44)])} fill={closed ? '#8d8f96' : '#a9dcf5'} className={closed ? undefined : 'shop-window'} />
+        {closed &&
+          [0.12, 0.22, 0.32].map((t) => (
+            <polyline key={t} points={pts([frontPoint(i, j, inset, 0.1, h * t), frontPoint(i, j, inset, 0.55, h * t)])} stroke="#73757c" strokeWidth={0.8} fill="none" />
+          ))}
         <polygon points={pts([frontPoint(i, j, inset, 0.66, 0), frontPoint(i, j, inset, 0.86, 0), frontPoint(i, j, inset, 0.86, h * 0.42), frontPoint(i, j, inset, 0.66, h * 0.42)])} fill={shade(sector.color, 0.7)} />
         {stripes}
       </g>
@@ -229,23 +236,49 @@ export const ParcelObject = memo(function ParcelObject({
     return (
       <g data-parcel={parcel.id}>
         <Box i={i} j={j} h={height} color={facade} inset={0.2} roof={ROOFS[variant % 4]} floors={2} />
+        <Lights i={i} j={j} inset={0.2} h={height} rows={2} seed={i * 13 + j * 7 + variant} />
       </g>
     )
   if (districtId === 'affaires')
     return (
       <g data-parcel={parcel.id}>
         <Box i={i} j={j} h={height} color={facade} inset={0.16} floors={Math.round(height / 11)} />
+        <Lights i={i} j={j} inset={0.16} h={height} rows={Math.round(height / 11)} seed={i * 13 + j * 7 + variant} />
       </g>
     )
   if (districtId === 'commercial')
     return (
       <g data-parcel={parcel.id}>
         <Box i={i} j={j} h={height} color={facade} inset={0.1} roof="#d7c3a3" floors={2} />
+        <Lights i={i} j={j} inset={0.1} h={height} rows={2} seed={i * 13 + j * 7 + variant} />
       </g>
     )
   return (
     <g data-parcel={parcel.id}>
       <Box i={i} j={j} h={height} color={facade} inset={0.14} floors={Math.round(height / 11)} />
+      <Lights i={i} j={j} inset={0.14} h={height} rows={Math.round(height / 11)} seed={i * 13 + j * 7 + variant} />
     </g>
   )
 })
+
+/** Fenêtres allumées le soir : quelques-unes par étage, toujours les mêmes pour un immeuble donné. */
+function Lights({ i, j, inset, h, rows, seed }: { i: number; j: number; inset: number; h: number; rows: number; seed: number }) {
+  const out = []
+  const floor = h / Math.max(1, rows)
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < 3; c++) {
+      // Petit tirage déterministe : environ une fenêtre sur deux est éclairée.
+      if ((seed * 31 + r * 17 + c * 7) % 5 < 2) continue
+      const t0 = 0.14 + c * 0.27
+      const y0 = r * floor + floor * 0.3
+      out.push(
+        <polygon
+          key={`${r}-${c}`}
+          points={pts([frontPoint(i, j, inset, t0, y0), frontPoint(i, j, inset, t0 + 0.16, y0), frontPoint(i, j, inset, t0 + 0.16, y0 + floor * 0.42), frontPoint(i, j, inset, t0, y0 + floor * 0.42)])}
+          fill="#fff3b0"
+        />,
+      )
+    }
+  }
+  return <g className="night-light">{out}</g>
+}

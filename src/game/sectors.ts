@@ -139,6 +139,15 @@ export function getDistrict(id: string): DistrictDef {
 export const FIRST_NAMES = ['Léa', 'Hugo', 'Emma', 'Lucas', 'Chloé', 'Nathan', 'Inès', 'Yanis', 'Manon', 'Karim', 'Sarah', 'Théo', 'Camille', 'Mehdi', 'Julie', 'Antoine', 'Aïcha', 'Louis', 'Zoé', 'Samuel']
 export const LAST_NAMES = ['Martin', 'Bernard', 'Dubois', 'Moreau', 'Laurent', 'Simon', 'Michel', 'Garcia', 'Roux', 'Fournier', 'Benali', 'Girard', 'Bonnet', 'Lambert', 'Diallo', 'Mercier']
 
+/** Événements de quartier : ils ne touchent que les commerces du quartier concerné. */
+export const LOCAL_EVENTS: { title: string; description: string; districts: string[]; mult: [number, number]; days: [number, number] }[] = [
+  { title: 'Marché de quartier', description: 'Les étals attirent du monde dans les rues.', districts: ['residentiel', 'centre'], mult: [1.18, 1.3], days: [1, 2] },
+  { title: 'Travaux de voirie', description: 'Rue barrée : les passants évitent le quartier.', districts: ['residentiel', 'commercial', 'centre', 'affaires'], mult: [0.75, 0.86], days: [8, 15] },
+  { title: 'Festival de rue', description: 'Concerts et stands : foule dans le quartier.', districts: ['centre', 'commercial'], mult: [1.3, 1.45], days: [2, 4] },
+  { title: 'Salon professionnel', description: 'Des milliers de visiteurs en déplacement.', districts: ['affaires'], mult: [1.22, 1.35], days: [3, 5] },
+  { title: 'Brocante', description: 'Les chineurs envahissent les trottoirs.', districts: ['residentiel', 'commercial'], mult: [1.15, 1.25], days: [1, 2] },
+]
+
 export const RANDOM_EVENTS: { title: string; description: string; sector: string | null; mult: [number, number]; days: [number, number] }[] = [
   { title: 'Vague de chaleur', description: 'Les clients sortent moins en journée.', sector: null, mult: [0.85, 0.92], days: [4, 9] },
   { title: 'Festival en ville', description: 'Afflux de touristes dans toute la ville.', sector: null, mult: [1.15, 1.3], days: [3, 6] },

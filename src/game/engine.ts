@@ -7,7 +7,8 @@ import { employeeFromCandidate, employeesDay, fairSalary, migrateEmployee, refre
 import { STARTING_SECTORS, checkObjectives, currentRank, isSectorUnlocked, sectorUnlockRank, setNetWorth } from './objectives'
 import { generateCity, getParcel, isFree, parcelRent, parcelTraffic } from './city'
 import { canDelegate, loanRateCut, marketingBoost, maxBusinesses, payHq, refreshOfficeCandidates, startingReputation } from './hq'
-import { RANDOM_EVENTS, SECTORS, getSector } from './sectors'
+import { LOCAL_EVENTS, RANDOM_EVENTS, SECTORS, getDistrict, getSector } from './sectors'
+import { WEATHER_NAMES, nextWeather, weatherMult } from './weather'
 import { addBatch, productDef, stockOf, takeStock } from './stock'
 import { warehouseDay } from './warehouse'
 import { SUPPLIERS_RANK, canNegotiate, closeDay, costOf, dailySupply, defaultSupplier, getSupplier, tryNegotiate, generateSuppliers, productQuality, receiveDeliveries, sectorSuppliers, unitCost } from './supply'
@@ -17,7 +18,7 @@ import { clamp, log, newId, pick, rand, randRange, round2, update } from './util
 export { rand }
 export { fairSalary, unitCost }
 
-export const SAVE_VERSION = 11
+export const SAVE_VERSION = 12
 export const START_CASH = 60000
 const HISTORY_DAYS = 120
 const BANKRUPTCY_DAYS = 30
@@ -119,6 +120,7 @@ export function newGame(seed = Date.now() % 2147483647): GameState {
     economy: 1,
     sectorTrends: Object.fromEntries(SECTORS.map((x) => [x.id, 1])),
     events: [],
+    weather: 'nuages',
     city: { size: 0, roads: [], parcels: [] },
     hq: null,
     officeCandidates: [],
@@ -155,14 +157,18 @@ function refreshCandidates(s: GameState) {
 
 // ---------- Simulation d'une journée ----------
 
+/** Événements qui touchent un commerce : ceux de son secteur (ou généraux) et ceux de son quartier. */
+export function eventsFor(s: GameState, b: Business) {
+  const districtId = getParcel(s.city, b.parcelId).districtId
+  return s.events.filter((e) => (e.sectorId === null || e.sectorId === b.sectorId) && (!e.districtId || e.districtId === districtId))
+}
+
 function simulateBusiness(s: GameState, b: Business): DayReport {
   const sector = getSector(b.sectorId)
   const parcel = getParcel(s.city, b.parcelId)
   const purchases = receiveDeliveries(s, b)
 
-  const eventMult = s.events
-    .filter((e) => e.sectorId === null || e.sectorId === b.sectorId)
-    .reduce((m, e) => m * e.demandMult, 1)
+  const eventMult = eventsFor(s, b).reduce((m, e) => m * e.demandMult, 1) * weatherMult(s.weather, b.sectorId)
   const marketingFactor = 1 + 0.5 * Math.log10(1 + b.marketingDaily / 10)
   const reputationFactor = 0.6 + b.reputation / 125
   // Les concurrents du même secteur installés à proximité détournent une partie des passants.
@@ -311,6 +317,23 @@ function updateMarket(s: GameState) {
   for (const id of Object.keys(s.sectorTrends)) {
     const t = s.sectorTrends[id]
     s.sectorTrends[id] = clamp(t + (1 - t) * 0.02 + (rand(s) - 0.5) * 0.02, 0.75, 1.25)
+  }
+
+  const weather = nextWeather(s, dateOf(s.day).getUTCMonth())
+  if (weather !== s.weather && (weather === 'pluie' || weather === 'neige')) log(s, `Météo : ${WEATHER_NAMES[weather].toLowerCase()} sur la ville, moins de monde dans les rues.`)
+  s.weather = weather
+
+  // Événements de quartier : un seul à la fois par quartier.
+  if (rand(s) < 1 / 9) {
+    const tpl = pick(s, LOCAL_EVENTS)
+    const districtId = pick(s, tpl.districts)
+    if (!s.events.some((e) => e.districtId === districtId)) {
+      const mult = round2(randRange(s, tpl.mult[0], tpl.mult[1]))
+      const duration = Math.round(randRange(s, tpl.days[0], tpl.days[1]))
+      s.events.push({ id: newId(s, 'e'), title: tpl.title, description: tpl.description, sectorId: null, districtId, demandMult: mult, endsDay: s.day + duration - 1 })
+      const mine = s.businesses.some((b) => getParcel(s.city, b.parcelId).districtId === districtId)
+      log(s, `${tpl.title} (${getDistrict(districtId).name}) : ${tpl.description} ${mult > 1 ? '+' : ''}${Math.round((mult - 1) * 100)} % de passants pendant ${duration} j.`, !mine ? 'info' : mult > 1 ? 'good' : 'bad')
+    }
   }
 
   for (const e of s.events.filter((x) => x.endsDay < s.day)) log(s, `Fin de l'événement : ${e.title}.`)
@@ -690,6 +713,10 @@ export function migrate(raw: GameState): GameState | null {
       'Touchez une boutique concurrente sur la carte pour l\'étudier ou la racheter, et suivez vos parts de marché dans la nouvelle appli Marché.',
     ])
     s.version = 11
+  }
+  if (s.version === 11) {
+    s.weather = 'nuages'
+    s.version = 12
   }
   return s.version === SAVE_VERSION ? s : null
 }

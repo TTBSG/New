@@ -3,11 +3,14 @@ import { getParcel, isFree, parcelRent, parcelTraffic } from '../game/city'
 import { HQ_LEVELS, HQ_RANK, hqLevel, hqOpeningCost, hqUnlocked, maxBusinesses, openHq } from '../game/hq'
 import { WAREHOUSE_DISTRICT, canOpenWarehouseHere, openWarehouse, servedShops, warehouseLevel, warehouseOf, warehouseOpeningCost, warehouseStock } from '../game/warehouse'
 import { businessAttraction, buyRival, buyRivalBlock, openBusiness, openingCost, serviceCapacity } from '../game/engine'
-import { STYLE_NAMES, getBrand, healthLabel, rivalPrice, threatsFor, victimsOf } from '../game/rivals'
+import { STYLE_NAMES, getBrand, healthLabel, pressureAt, rivalPrice, threatsFor, victimsOf } from '../game/rivals'
+import { SLOT_NAMES } from '../game/schedule'
+import { WEATHER_NAMES } from '../game/weather'
+import { businessAlerts } from './phone/apps'
 import { isSectorUnlocked, sectorUnlockRank } from '../game/objectives'
 import { SECTORS, getDistrict, getSector } from '../game/sectors'
 import type { GameState } from '../game/types'
-import { CityMap, type Overlay, type RivalMark, type WarehouseMark } from './city/CityMap'
+import { CityMap, type LocalEventMark, type Overlay, type Phase, type RivalMark, type ShopStatus, type WarehouseMark } from './city/CityMap'
 import { eur, num, signed } from './format'
 import { Icon, type IconName } from './icons'
 import type { Act } from './useGame'
@@ -16,11 +19,34 @@ const OVERLAYS: { id: Overlay; label: string }[] = [
   { id: 'none', label: 'Ville' },
   { id: 'traffic', label: 'Fréquentation' },
   { id: 'rent', label: 'Loyers' },
+  { id: 'rivals', label: 'Concurrence' },
 ]
+
+const LEGENDS: Record<Exclude<Overlay, 'none'>, [string, string]> = {
+  traffic: ['Peu de passants', 'Très passant'],
+  rent: ['Loyer bas', 'Loyer élevé'],
+  rivals: ['Terrain libre', 'Très disputé'],
+}
+
+/** Durée d'un moment de la journée à l'écran (secondes de jeu en marche). */
+const PHASE_SECONDS = 24
+const WEATHER_ICONS = { soleil: 'sun', nuages: 'cloud', pluie: 'rain', neige: 'snow' } as const
+
+/** Matin, midi, soir : l'ambiance de la ville avance tant que le temps du jeu tourne. */
+function useDayPhase(running: boolean): Phase {
+  const [seconds, setSeconds] = useState(0)
+  useEffect(() => {
+    if (!running) return
+    const id = setInterval(() => setSeconds((v) => v + 1), 1000)
+    return () => clearInterval(id)
+  }, [running])
+  return (Math.floor(seconds / PHASE_SECONDS) % 3) as Phase
+}
 
 export function CityView({
   state,
   act,
+  running,
   onManage,
   onHq,
   onWarehouse,
@@ -28,6 +54,8 @@ export function CityView({
 }: {
   state: GameState
   act: Act
+  /** Le temps du jeu avance : l'ambiance de la ville aussi. */
+  running: boolean
   onManage: (businessId: string) => void
   onHq: () => void
   onWarehouse: (warehouseId: string) => void
@@ -81,6 +109,35 @@ export function CityView({
       ? victimsOf(state, rival).map((b) => `${rival.parcelId}>${b.parcelId}`).join('|')
       : ''
   const links = useMemo<[string, string][]>(() => (linkKey ? linkKey.split('|').map((k) => k.split('>') as [string, string]) : []), [linkKey])
+  const phase = useDayPhase(running)
+  const closed = state.businesses.filter((b) => !b.hours[phase]).map((b) => b.parcelId).join(',')
+  const statusKey = state.businesses.map((b) => `${b.id}:${businessAlerts(b).join('+')}`).join('|')
+  const status = useMemo<Record<string, ShopStatus>>(
+    () =>
+      Object.fromEntries(
+        statusKey
+          .split('|')
+          .filter(Boolean)
+          .map((k) => {
+            const [id, alerts] = k.split(':')
+            return [id, { alert: alerts.length > 0, queue: alerts.includes('Personnel débordé') }]
+          }),
+      ),
+    [statusKey],
+  )
+  const eventKey = state.events.filter((e) => e.districtId).map((e) => `${e.districtId}:${e.title}:${e.demandMult}`).join('|')
+  const localEvents = useMemo<LocalEventMark[]>(
+    () =>
+      eventKey
+        ? eventKey.split('|').map((k) => {
+            const [districtId, title, mult] = k.split(':')
+            return { districtId, title, mult: Number(mult) }
+          })
+        : [],
+    [eventKey],
+  )
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- la pression ne change que si une boutique concurrente ouvre ou ferme
+  const pressure = useMemo(() => Object.fromEntries(state.city.parcels.map((p) => [p.id, pressureAt(state, p)])), [rivalKey, state.city])
   const ownedSectors = [...new Set(state.businesses.map((b) => b.sectorId))].filter((id) => !warehouseOf(state, id))
 
   return (
@@ -92,6 +149,11 @@ export function CityView({
         warehouses={warehouseMarks}
         rivals={rivalMarks}
         links={links}
+        phase={phase}
+        closed={closed}
+        status={status}
+        localEvents={localEvents}
+        pressure={pressure}
         selectedId={selectedId}
         overlay={overlay}
         onSelect={(id) => {
@@ -101,6 +163,8 @@ export function CityView({
         }}
       />
 
+      <div className={`weather-layer weather-${state.weather}`} aria-hidden="true" />
+
       <div className="map-filters">
         {OVERLAYS.map((o) => (
           <button key={o.id} className={`chip ${overlay === o.id ? 'active' : ''}`} onClick={() => setOverlay(o.id)}>
@@ -108,11 +172,14 @@ export function CityView({
           </button>
         ))}
       </div>
+      <span className="chip ambiance" title="Moment de la journée et météo">
+        <Icon name={phase === 2 ? 'moon' : WEATHER_ICONS[state.weather]} size={14} /> {SLOT_NAMES[phase]} · {WEATHER_NAMES[state.weather]}
+      </span>
       {overlay !== 'none' && (
         <div className={`map-legend ${overlay}`}>
-          <span>{overlay === 'traffic' ? 'Peu de passants' : 'Loyer bas'}</span>
+          <span>{LEGENDS[overlay][0]}</span>
           <i />
-          <span>{overlay === 'traffic' ? 'Très passant' : 'Loyer élevé'}</span>
+          <span>{LEGENDS[overlay][1]}</span>
         </div>
       )}
 

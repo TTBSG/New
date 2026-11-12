@@ -538,3 +538,42 @@ input[type='range'] { width: 100%; accent-color: var(--accent); }
 @media (prefers-reduced-motion: reduce) { .rival-link { animation: none; } }
 .sheet .good { color: var(--good); }
 .sheet .bad { color: var(--bad); }
+
+/* ---------- Ville vivante : heure, météo, circulation ---------- */
+.map-legend.rivals i { background: linear-gradient(90deg, #fbe9e7, #a3231b); }
+.chip.ambiance { position: absolute; left: 14px; bottom: calc(env(safe-area-inset-bottom) + 24px); z-index: 10; display: inline-flex; align-items: center; gap: 5px; background: rgb(255 255 255 / 0.9); color: var(--text-2); }
+.cityview .map-legend { bottom: calc(env(safe-area-inset-bottom) + 66px); }
+.citymap.analysis { background: none; }
+.citymap { transition: background-color 3s; }
+.citymap.phase-0 { background: linear-gradient(#ffdcb8, rgb(255 236 214 / 0.4) 45%, transparent); }
+.citymap.phase-2 { background: linear-gradient(#1c2452, #3a3766 45%, #4d4668); }
+.daylight { fill: #ffb46b; fill-opacity: 0; transition: fill 3s, fill-opacity 3s; }
+.phase-0 .daylight { fill: #ffb46b; fill-opacity: 0.1; }
+.phase-2 .daylight { fill: #121a45; fill-opacity: 0.34; }
+.night-light, .headlight { opacity: 0; transition: opacity 3s; }
+.phase-2 .night-light, .phase-2 .headlight { opacity: 1; }
+.shop-window { transition: fill 3s; }
+.phase-2 .shop-window { fill: #ffd97a; }
+.phase-2 .day-only { display: none; }
+.umbrella { display: none; }
+.cityview:has(.weather-pluie) .umbrella { display: block; }
+.pin-alert { animation: alert-pulse 1.4s ease-in-out infinite; transform-origin: 12px -32px; transform-box: view-box; }
+@keyframes alert-pulse { 50% { opacity: 0.55; } }
+
+.weather-layer { position: absolute; inset: 0; pointer-events: none; z-index: 2; transition: background-color 2s; }
+.weather-nuages { background: rgb(120 130 150 / 0.1); }
+.weather-pluie {
+  background-color: rgb(70 90 125 / 0.2);
+  background-image: linear-gradient(105deg, transparent 46%, rgb(255 255 255 / 0.5) 48%, transparent 50%), linear-gradient(105deg, transparent 46%, rgb(255 255 255 / 0.3) 48%, transparent 50%);
+  background-size: 34px 60px, 51px 90px;
+  animation: rain-fall 0.5s linear infinite;
+}
+@keyframes rain-fall { to { background-position: -16px 60px, -24px 90px; } }
+.weather-neige {
+  background-color: rgb(225 235 245 / 0.22);
+  background-image: radial-gradient(circle at 20% 30%, #fff 1.8px, transparent 2.3px), radial-gradient(circle at 70% 60%, rgb(255 255 255 / 0.85) 1.3px, transparent 1.8px), radial-gradient(circle at 45% 80%, rgb(255 255 255 / 0.7) 2.2px, transparent 2.8px);
+  background-size: 67px 71px, 41px 37px, 113px 97px;
+  animation: snow-fall 6s linear infinite;
+}
+@keyframes snow-fall { to { background-position: 33px 142px, -41px 111px, 56px 194px; } }
+@media (prefers-reduced-motion: reduce) { .weather-layer, .pin-alert { animation: none; } }
