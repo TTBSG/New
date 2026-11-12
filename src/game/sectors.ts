@@ -108,10 +108,12 @@ export const SECTORS: SectorDef[] = [
 ]
 
 export const DISTRICTS: DistrictDef[] = [
-  { id: 'residentiel', name: 'Quartier résidentiel', rentMonthly: 1200, traffic: 230 },
-  { id: 'commercial', name: 'Zone commerciale', rentMonthly: 2600, traffic: 430 },
-  { id: 'centre', name: 'Centre-ville', rentMonthly: 3800, traffic: 560 },
-  { id: 'affaires', name: 'Quartier d\'affaires', rentMonthly: 5200, traffic: 700 },
+  { id: 'residentiel', name: 'Quartier résidentiel', rentMonthly: 1200, traffic: 230, fit: { boulangerie: 1.12, superette: 1.12, restaurant: 0.92, electronique: 0.92 }, description: 'Des familles et des habitués : le pain et les courses du quotidien.' },
+  { id: 'commercial', name: 'Zone commerciale', rentMonthly: 2600, traffic: 430, fit: { vetements: 1.12, electronique: 1.12, boulangerie: 0.94 }, description: 'On y vient pour faire les magasins.' },
+  { id: 'centre', name: 'Centre-ville', rentMonthly: 3800, traffic: 560, fit: {}, description: 'Tout le monde y passe : aucun commerce n\'y est désavantagé.' },
+  { id: 'affaires', name: 'Quartier d\'affaires', rentMonthly: 5200, traffic: 700, fit: { cafe: 1.12, restaurant: 1.12, superette: 0.9, vetements: 0.94 }, description: 'Des salariés pressés : cafés du matin et déjeuners.' },
+  { id: 'campus', name: 'Campus', rentMonthly: 1700, traffic: 420, fit: { cafe: 1.22, electronique: 1.15, boulangerie: 1.1, restaurant: 0.88, vetements: 0.95 }, description: 'Des étudiants au petit budget : cafés, sandwichs et high-tech.' },
+  { id: 'port', name: 'Port', rentMonthly: 3200, traffic: 540, fit: { restaurant: 1.28, cafe: 1.12, vetements: 1.1, superette: 0.85, electronique: 0.82 }, description: 'Promeneurs et touristes : restaurants et terrasses en bord de mer.' },
 ]
 
 /** Fournisseurs spécialisés de chaque secteur (en plus du « Grossiste du Coin », disponible partout). */
@@ -141,9 +143,9 @@ export const LAST_NAMES = ['Martin', 'Bernard', 'Dubois', 'Moreau', 'Laurent', '
 
 /** Événements de quartier : ils ne touchent que les commerces du quartier concerné. */
 export const LOCAL_EVENTS: { title: string; description: string; districts: string[]; mult: [number, number]; days: [number, number] }[] = [
-  { title: 'Marché de quartier', description: 'Les étals attirent du monde dans les rues.', districts: ['residentiel', 'centre'], mult: [1.18, 1.3], days: [1, 2] },
-  { title: 'Travaux de voirie', description: 'Rue barrée : les passants évitent le quartier.', districts: ['residentiel', 'commercial', 'centre', 'affaires'], mult: [0.75, 0.86], days: [8, 15] },
-  { title: 'Festival de rue', description: 'Concerts et stands : foule dans le quartier.', districts: ['centre', 'commercial'], mult: [1.3, 1.45], days: [2, 4] },
+  { title: 'Marché de quartier', description: 'Les étals attirent du monde dans les rues.', districts: ['residentiel', 'centre', 'port'], mult: [1.18, 1.3], days: [1, 2] },
+  { title: 'Travaux de voirie', description: 'Rue barrée : les passants évitent le quartier.', districts: ['residentiel', 'commercial', 'centre', 'affaires', 'campus', 'port'], mult: [0.75, 0.86], days: [8, 15] },
+  { title: 'Festival de rue', description: 'Concerts et stands : foule dans le quartier.', districts: ['centre', 'commercial', 'campus', 'port'], mult: [1.3, 1.45], days: [2, 4] },
   { title: 'Salon professionnel', description: 'Des milliers de visiteurs en déplacement.', districts: ['affaires'], mult: [1.22, 1.35], days: [3, 5] },
   { title: 'Brocante', description: 'Les chineurs envahissent les trottoirs.', districts: ['residentiel', 'commercial'], mult: [1.15, 1.25], days: [1, 2] },
 ]

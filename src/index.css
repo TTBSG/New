@@ -577,3 +577,14 @@ input[type='range'] { width: 100%; accent-color: var(--accent); }
 }
 @keyframes snow-fall { to { background-position: 33px 142px, -41px 111px, 56px 194px; } }
 @media (prefers-reduced-motion: reduce) { .weather-layer, .pin-alert { animation: none; } }
+
+/* ---------- Ville agrandie : quartiers et lieux remarquables ---------- */
+.locked-parcel { opacity: 0.4; }
+.perks { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; }
+.perk-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.perk { display: inline-flex; align-items: center; gap: 4px; padding: 4px 9px; border-radius: 999px; font-size: 0.74rem; font-weight: 800; background: var(--surface-2); color: var(--text); border: 1.5px solid transparent; }
+.perk.good { border-color: #5cc17a; background: #e7f6ec; }
+.perk.bad { border-color: #e59a9a; background: #fde8e8; }
+.fit-tag { margin-left: 6px; font-weight: 800; }
+.fit-tag.good { color: var(--good); }
+.fit-tag.bad { color: var(--bad); }

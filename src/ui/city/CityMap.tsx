@@ -1,9 +1,9 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type WheelEvent as RWheelEvent } from 'react'
-import { isRoad, parcelRent, parcelTraffic } from '../../game/city'
+import { getLandmark, isRoad, parcelRent, parcelTraffic } from '../../game/city'
 import type { Business, City, Parcel } from '../../game/types'
 import { signed } from '../format'
 import { Icon, type IconName } from '../icons'
-import { GROUND, MAP_H, MAP_W, P, ParcelObject, SHOP_HEIGHT, diamond } from './iso'
+import { GROUND, MAP_H, MAP_W, OX, OY, P, ParcelObject, SEA_WIDTH, SHOP_HEIGHT, TH, diamond } from './iso'
 
 export type Overlay = 'none' | 'traffic' | 'rent' | 'rivals'
 /** Moment de la journée affiché : matin, midi, soir. */
@@ -33,26 +33,34 @@ interface View {
   k: number
 }
 
-const Ground = memo(function Ground({ city, overlay, pressure }: { city: City; overlay: Overlay; pressure: Record<string, number> }) {
+const Ground = memo(function Ground({ city, overlay, pressure, locked }: { city: City; overlay: Overlay; pressure: Record<string, number>; locked: string }) {
+  const lockedSet = new Set(locked.split(','))
   const tiles = []
+  // Bord de mer à l'est, le long du Campus et du Port.
+  const sea = [P(city.width, 0), P(city.width + SEA_WIDTH, 0), P(city.width + SEA_WIDTH, city.height), P(city.width, city.height)]
+  tiles.push(<polygon key="sea" points={sea.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ')} fill="#8fd0ea" stroke="#bfe6f5" strokeWidth={3} />)
+  for (let k = 0; k < 6; k++) {
+    const [x, y] = P(city.width + 0.5 + (k % 2) * 0.8, 1 + k * 2.1)
+    tiles.push(<path key={`wave${k}`} d={`M${x - 7},${y} q3.5,-3 7,0 t7,0`} stroke="#fff" strokeOpacity={0.7} strokeWidth={1.2} fill="none" />)
+  }
   let lo = Infinity
   let hi = -Infinity
   const value = (p: Parcel) => (overlay === 'traffic' ? parcelTraffic(p) : overlay === 'rivals' ? (pressure[p.id] ?? 0) : parcelRent(p))
   if (overlay !== 'none') {
     for (const p of city.parcels) {
-      if (p.kind !== 'lot') continue
+      if (p.kind !== 'lot' || lockedSet.has(p.districtId)) continue
       lo = Math.min(lo, value(p))
       hi = Math.max(hi, value(p))
     }
     // Sans aucun concurrent, toute la ville est « libre » plutôt qu'à mi-teinte.
     if (overlay === 'rivals') lo = 0
   }
-  for (let i = 0; i < city.size; i++) {
-    for (let j = 0; j < city.size; j++) {
+  for (let i = 0; i < city.width; i++) {
+    for (let j = 0; j < city.height; j++) {
       if (!isRoad(i, j)) continue
       tiles.push(<polygon key={`r${i}-${j}`} points={diamond(i, j)} fill="#9a9590" stroke="#8b8681" strokeWidth={0.6} />)
-      const onI = city.roads.includes(i)
-      const onJ = city.roads.includes(j)
+      const onI = city.roadsI.includes(i)
+      const onJ = city.roadsJ.includes(j)
       if (onI !== onJ) {
         const [a, b] = onI ? [P(i + 0.5, j + 0.2), P(i + 0.5, j + 0.8)] : [P(i + 0.2, j + 0.5), P(i + 0.8, j + 0.5)]
         tiles.push(<line key={`m${i}-${j}`} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke="#f4efe6" strokeWidth={1.6} strokeDasharray="5 5" />)
@@ -61,8 +69,9 @@ const Ground = memo(function Ground({ city, overlay, pressure }: { city: City; o
   }
   for (const p of city.parcels) {
     let fill = p.kind === 'park' ? '#b9e0a0' : GROUND[p.districtId]
+    if (overlay === 'none' && lockedSet.has(p.districtId)) fill = '#dddad3'
     if (overlay !== 'none') {
-      fill = p.kind === 'lot' ? mix(RAMPS[overlay][0], RAMPS[overlay][1], hi > lo ? (value(p) - lo) / (hi - lo) : overlay === 'rivals' ? 0 : 0.5) : '#e6e2db'
+      fill = p.kind === 'lot' && !lockedSet.has(p.districtId) ? mix(RAMPS[overlay][0], RAMPS[overlay][1], hi > lo ? (value(p) - lo) / (hi - lo) : overlay === 'rivals' ? 0 : 0.5) : '#e6e2db'
     }
     tiles.push(<polygon key={p.id} data-parcel={p.id} points={diamond(p.i, p.j)} fill={fill} stroke="#fff" strokeOpacity={0.6} strokeWidth={0.8} />)
   }
@@ -79,6 +88,7 @@ const Objects = memo(function Objects({
   warehouses,
   rivals,
   closed,
+  locked,
   faded,
 }: {
   city: City
@@ -88,9 +98,12 @@ const Objects = memo(function Objects({
   rivals: RivalMark[]
   /** Parcelles des commerces fermés sur le créneau affiché, séparées par des virgules. */
   closed: string
+  /** Quartiers pas encore débloqués, séparés par des virgules. */
+  locked: string
   faded: boolean
 }) {
   const closedSet = useMemo(() => new Set(closed.split(',')), [closed])
+  const lockedSet = useMemo(() => new Set(locked.split(',')), [locked])
   const sorted = useMemo(() => [...city.parcels].sort((a, b) => a.i + a.j - (b.i + b.j) || a.i - b.i), [city])
   return (
     <g className={faded ? 'faded' : undefined}>
@@ -103,6 +116,7 @@ const Objects = memo(function Objects({
           warehouse={warehouses.find((w) => w.parcelId === p.id)}
           rivalColor={rivals.find((r) => r.parcelId === p.id)?.color}
           closed={closedSet.has(p.id)}
+          locked={lockedSet.has(p.districtId)}
         />
       ))}
     </g>
@@ -141,18 +155,19 @@ const CAR_COLORS = ['#e8743b', '#5c8de8', '#f4f4f4', '#3b2f2a', '#4cb86b', '#f2b
 
 /** Circulation d'ambiance : voitures sur les rues et passants sur les trottoirs. */
 const Traffic = memo(function Traffic({ city }: { city: City }) {
-  const n = city.size
+  // alongJ : la rue occupe une colonne i et se parcourt sur toute la hauteur ; sinon une ligne j sur toute la largeur.
   const line = (road: number, alongJ: boolean, offset: number, reverse: boolean) => {
     const a = alongJ ? P(road + 0.5 + offset, 0) : P(0, road + 0.5 + offset)
-    const b = alongJ ? P(road + 0.5 + offset, n) : P(n, road + 0.5 + offset)
+    const b = alongJ ? P(road + 0.5 + offset, city.height) : P(city.width, road + 0.5 + offset)
     const [from, to] = reverse ? [b, a] : [a, b]
     return `M${from[0].toFixed(1)},${from[1].toFixed(1)} L${to[0].toFixed(1)},${to[1].toFixed(1)}`
   }
   const cars = []
   const walkers = []
   let k = 0
-  for (const road of city.roads) {
-    for (const alongJ of [true, false]) {
+  const roads = [...city.roadsI.map((road) => ({ road, alongJ: true })), ...city.roadsJ.map((road) => ({ road, alongJ: false }))]
+  for (const { road, alongJ } of roads) {
+    {
       for (const reverse of [false, true]) {
         const dur = 16 + ((road * 3 + k * 5) % 9)
         cars.push(
@@ -186,7 +201,7 @@ const Traffic = memo(function Traffic({ city }: { city: City }) {
 })
 
 /** Carrefour intérieur de chaque quartier : c'est là que s'installent marchés, festivals et chantiers. */
-const DISTRICT_SPOT: Record<string, [number, number]> = { residentiel: [2, 2], affaires: [10, 2], commercial: [2, 10], centre: [10, 10] }
+const DISTRICT_SPOT: Record<string, [number, number]> = { residentiel: [2, 2], affaires: [10, 2], commercial: [2, 10], centre: [10, 10], campus: [17, 2], port: [17, 10] }
 const TENT_COLORS = ['#e85d8a', '#f2b134', '#5c8de8', '#4cb86b']
 
 const EventDecor = memo(function EventDecor({ districtId, positive }: { districtId: string; positive: boolean }) {
@@ -246,12 +261,14 @@ const Trucks = memo(function Trucks({ from, to }: { from: Parcel; to: Parcel[] }
   )
 })
 
-const DISTRICT_AT: Record<string, string> = { RÉSIDENTIEL: 'residentiel', AFFAIRES: 'affaires', COMMERCIAL: 'commercial', 'CENTRE-VILLE': 'centre' }
+const DISTRICT_AT: Record<string, string> = { RÉSIDENTIEL: 'residentiel', AFFAIRES: 'affaires', COMMERCIAL: 'commercial', 'CENTRE-VILLE': 'centre', CAMPUS: 'campus', PORT: 'port' }
 const DISTRICT_LABELS: [number, number, string][] = [
   [3.5, 3.5, 'RÉSIDENTIEL'],
   [9.5, 3.5, 'AFFAIRES'],
   [3.5, 9.5, 'COMMERCIAL'],
   [9.5, 9.5, 'CENTRE-VILLE'],
+  [16.5, 3.5, 'CAMPUS'],
+  [16.5, 9.5, 'PORT'],
 ]
 
 export function CityMap({
@@ -266,6 +283,7 @@ export function CityMap({
   status,
   localEvents,
   pressure,
+  locked,
   selectedId,
   overlay,
   onSelect,
@@ -284,6 +302,8 @@ export function CityMap({
   localEvents: LocalEventMark[]
   /** Pression concurrentielle par parcelle, pour le calque « Concurrence ». */
   pressure: Record<string, number>
+  /** Quartiers pas encore débloqués et rang nécessaire : « campus:3,port:4 ». */
+  locked: string
   selectedId: string | null
   overlay: Overlay
   onSelect: (parcelId: string | null) => void
@@ -319,7 +339,8 @@ export function CityMap({
   useEffect(() => {
     if (view) return
     const k = Math.max(0.8, Math.min(1.1, size.w / 440))
-    setView(clamp({ k, x: size.w / 2 - (MAP_W / 2) * k, y: size.h * 0.5 - (MAP_H / 2) * k }))
+    // On centre sur les quatre quartiers du départ ; les nouveaux se découvrent en faisant glisser la carte.
+    setView(clamp({ k, x: size.w / 2 - OX * k, y: size.h * 0.5 - (OY + 6.5 * TH) * k }))
   }, [size, view, clamp])
 
   const zoomAt = useCallback(
@@ -397,6 +418,9 @@ export function CityMap({
   const shops = useMemo(() => Object.fromEntries(businesses.map((b) => [b.parcelId, b.sectorId])), [businesses])
   const parcelsById = useMemo(() => Object.fromEntries(city.parcels.map((p) => [p.id, p])), [city])
   const selected = selectedId ? parcelsById[selectedId] : null
+  const lockedRanks = useMemo(() => Object.fromEntries(locked.split(',').filter(Boolean).map((x) => x.split(':'))), [locked]) as Record<string, string>
+  const lockedIds = Object.keys(lockedRanks).join(',')
+  const landmarks = useMemo(() => city.parcels.filter((p) => p.landmarkId), [city])
 
   return (
     <div className={`citymap phase-${phase} ${overlay !== 'none' ? 'analysis' : ''}`} ref={wrapRef}>
@@ -419,11 +443,11 @@ export function CityMap({
             </pattern>
           </defs>
           <g transform={`translate(${view.x.toFixed(1)} ${view.y.toFixed(1)}) scale(${view.k.toFixed(3)})`}>
-            <Ground city={city} overlay={overlay} pressure={pressure} />
+            <Ground city={city} overlay={overlay} pressure={pressure} locked={lockedIds} />
             {overlay === 'none' && <Traffic city={city} />}
             {overlay === 'none' && localEvents.map((e) => <EventDecor key={e.districtId} districtId={e.districtId} positive={e.mult >= 1} />)}
             {selected && <polygon points={diamond(selected.i, selected.j, 0.04)} fill="none" stroke="#e8743b" strokeWidth={3} className="sel-ring" />}
-            <Objects city={city} shops={shops} hq={hq} warehouses={warehouses} rivals={rivals} closed={closed} faded={overlay !== 'none'} />
+            <Objects city={city} shops={shops} hq={hq} warehouses={warehouses} rivals={rivals} closed={closed} locked={lockedIds} faded={overlay !== 'none'} />
             {/* Lumière du moment : aube dorée le matin, bleu nuit le soir. */}
             {overlay === 'none' && <rect x={-3000} y={-3000} width={8000} height={8000} className="daylight" pointerEvents="none" />}
             {links.map(([from, to]) => {
@@ -431,16 +455,33 @@ export function CityMap({
               const [x2, y2] = P(parcelsById[to].i + 0.5, parcelsById[to].j + 0.5, SHOP_HEIGHT + 6)
               return <line key={`${from}-${to}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#d64545" strokeWidth={3} strokeDasharray="2 7" strokeLinecap="round" className="rival-link" pointerEvents="none" />
             })}
-            {DISTRICT_LABELS.map(([a, b, t]) => {
+            {view.k >= 0.7 &&
+              landmarks.map((p) => {
+                const [x, y] = P(p.i + 0.5, p.j + 1.05)
+                const name = getLandmark(p.landmarkId!).name
+                const w = name.length * 5.4 + 14
+                return (
+                  <g key={p.id} pointerEvents="none">
+                    <rect x={x - w / 2} y={y - 2} width={w} height={16} rx={8} fill="#fff" opacity={0.92} />
+                    <text x={x} y={y + 9.5} textAnchor="middle" fontSize={9.5} fontWeight={800} fill="#3b2f2a" fontFamily="Nunito, system-ui">
+                      {name}
+                    </text>
+                  </g>
+                )
+              })}
+            {DISTRICT_LABELS.map(([a, b, name]) => {
               const [x, y] = P(a, b)
+              const rank = lockedRanks[DISTRICT_AT[name]]
+              const t = rank ? `${name} · RANG ${rank}` : name
+              const lw = Math.max(96, t.length * 6.6 + 18)
               return (
-                <g key={t} pointerEvents="none">
-                  <rect x={x - 48} y={y - 10} width={96} height={20} rx={10} fill="#3b2f2a" opacity={0.72} />
+                <g key={name} pointerEvents="none">
+                  <rect x={x - lw / 2} y={y - 10} width={lw} height={20} rx={10} fill="#3b2f2a" opacity={0.72} />
                   <text x={x} y={y + 4} textAnchor="middle" fontSize={10} fontWeight={800} fill="#fff" fontFamily="Nunito, system-ui">
                     {t}
                   </text>
                   {localEvents
-                    .filter((e) => DISTRICT_AT[t] === e.districtId)
+                    .filter((e) => DISTRICT_AT[name] === e.districtId)
                     .map((e) => {
                       const label = `${e.title} ${e.mult >= 1 ? '+' : '−'}${Math.abs(Math.round((e.mult - 1) * 100))} %`
                       const w = label.length * 5.6 + 16

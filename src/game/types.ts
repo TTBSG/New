@@ -47,9 +47,12 @@ export interface DistrictDef {
   rentMonthly: number
   /** Passants par jour devant un local moyen. */
   traffic: number
+  /** Clientèle du quartier : multiplicateur de fréquentation par secteur (1 si absent). */
+  fit: Record<string, number>
+  description: string
 }
 
-export type ParcelKind = 'lot' | 'building' | 'park'
+export type ParcelKind = 'lot' | 'building' | 'park' | 'landmark'
 
 /** Une case de la ville. Les « lots » sont les locaux commerciaux qu'on peut louer. */
 export interface Parcel {
@@ -65,12 +68,17 @@ export interface Parcel {
   /** Apparence des bâtiments décoratifs. */
   height: number
   variant: number
+  /** Lieu remarquable installé ici (gare, lycée…) quand kind vaut « landmark ». */
+  landmarkId?: string
 }
 
 export interface City {
-  size: number
-  /** Indices des lignes et colonnes occupées par des rues. */
-  roads: number[]
+  /** Dimensions de la grille : largeur (axe i) et hauteur (axe j). */
+  width: number
+  height: number
+  /** Indices des colonnes (i) et des lignes (j) occupées par des rues. */
+  roadsI: number[]
+  roadsJ: number[]
   parcels: Parcel[]
 }
 

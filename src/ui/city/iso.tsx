@@ -6,11 +6,14 @@ import type { Parcel } from '../../game/types'
 
 export const TW = 64
 export const TH = 32
-const N = 13
-export const OX = (N * TW) / 2
+/** Grille de la ville (voir game/city.ts) et bande de mer à l'est. */
+const GRID_W = 20
+const GRID_H = 13
+export const SEA_WIDTH = 2
+export const OX = (GRID_H * TW) / 2
 export const OY = 140
-export const MAP_W = N * TW
-export const MAP_H = N * TH + OY + 30
+export const MAP_W = ((GRID_W + SEA_WIDTH + GRID_H) * TW) / 2
+export const MAP_H = ((GRID_W + SEA_WIDTH + GRID_H) * TH) / 2 + OY + 30
 export const SHOP_HEIGHT = 30
 
 type Pt = [number, number]
@@ -38,6 +41,8 @@ export const GROUND: Record<string, string> = {
   affaires: '#d5dcec',
   commercial: '#f0e0c2',
   centre: '#eed3cc',
+  campus: '#d8ead0',
+  port: '#e6e2cf',
 }
 
 const FACADES: Record<string, string[]> = {
@@ -45,6 +50,8 @@ const FACADES: Record<string, string[]> = {
   affaires: ['#9fb6e6', '#8eaadf', '#b3c4ea', '#a7bde8'],
   commercial: ['#f2d7a9', '#ecc993', '#f4dfba', '#e9c48f'],
   centre: ['#efc1b5', '#e6aa9b', '#f3d2c6', '#e8b5a5'],
+  campus: ['#e7dcc4', '#d9c9a8', '#efe6d2', '#dccfb4'],
+  port: ['#f4f1ea', '#cfe3ec', '#f2dfc9', '#dbe9e4'],
 }
 const ROOFS = ['#c8664a', '#b5523c', '#d9814f', '#c25b45']
 
@@ -118,6 +125,7 @@ export const ParcelObject = memo(function ParcelObject({
   warehouse,
   rivalColor,
   closed,
+  locked,
 }: {
   parcel: Parcel
   shopSectorId?: string
@@ -127,8 +135,13 @@ export const ParcelObject = memo(function ParcelObject({
   rivalColor?: string
   /** Commerce fermé sur le créneau affiché : rideau baissé. */
   closed?: boolean
+  /** Quartier pas encore débloqué : pas de panneau « À louer ». */
+  locked?: boolean
 }) {
   const { i, j, districtId, kind, height, variant } = parcel
+
+  if (kind === 'landmark' && !shopSectorId) return <Landmark parcel={parcel} locked={locked} />
+  if (locked && kind === 'lot' && !shopSectorId) return null
 
   if (rivalColor && !shopSectorId) {
     // Boutique concurrente : façade sombre, bandeau uni aux couleurs de l'enseigne et fanion sur le toit.
@@ -234,32 +247,122 @@ export const ParcelObject = memo(function ParcelObject({
   const facade = FACADES[districtId][variant % 4]
   if (districtId === 'residentiel')
     return (
-      <g data-parcel={parcel.id}>
+      <g data-parcel={parcel.id} className={locked ? 'locked-parcel' : undefined}>
         <Box i={i} j={j} h={height} color={facade} inset={0.2} roof={ROOFS[variant % 4]} floors={2} />
         <Lights i={i} j={j} inset={0.2} h={height} rows={2} seed={i * 13 + j * 7 + variant} />
       </g>
     )
   if (districtId === 'affaires')
     return (
-      <g data-parcel={parcel.id}>
+      <g data-parcel={parcel.id} className={locked ? 'locked-parcel' : undefined}>
         <Box i={i} j={j} h={height} color={facade} inset={0.16} floors={Math.round(height / 11)} />
         <Lights i={i} j={j} inset={0.16} h={height} rows={Math.round(height / 11)} seed={i * 13 + j * 7 + variant} />
       </g>
     )
   if (districtId === 'commercial')
     return (
-      <g data-parcel={parcel.id}>
+      <g data-parcel={parcel.id} className={locked ? 'locked-parcel' : undefined}>
         <Box i={i} j={j} h={height} color={facade} inset={0.1} roof="#d7c3a3" floors={2} />
         <Lights i={i} j={j} inset={0.1} h={height} rows={2} seed={i * 13 + j * 7 + variant} />
       </g>
     )
   return (
-    <g data-parcel={parcel.id}>
+    <g data-parcel={parcel.id} className={locked ? 'locked-parcel' : undefined}>
       <Box i={i} j={j} h={height} color={facade} inset={0.14} floors={Math.round(height / 11)} />
       <Lights i={i} j={j} inset={0.14} h={height} rows={Math.round(height / 11)} seed={i * 13 + j * 7 + variant} />
     </g>
   )
 })
+
+/** Lieux remarquables : un bâtiment reconnaissable par quartier. */
+function Landmark({ parcel, locked }: { parcel: Parcel; locked?: boolean }) {
+  const { i, j } = parcel
+  const [cx, cy] = P(i + 0.5, j + 0.5)
+  let body = null
+  switch (parcel.landmarkId) {
+    case 'gare': {
+      const [tx, ty] = P(i + 0.5, j + 0.5, 58)
+      body = (
+        <>
+          <Box i={i} j={j} h={26} color="#d9b38c" inset={0.05} roof="#7a4f3a" />
+          <polygon points={pts([frontPoint(i, j, 0.05, 0.12, 0), frontPoint(i, j, 0.05, 0.36, 0), frontPoint(i, j, 0.05, 0.36, 15), frontPoint(i, j, 0.05, 0.12, 15)])} fill="#5c3d2e" />
+          <polygon points={pts([frontPoint(i, j, 0.05, 0.5, 6), frontPoint(i, j, 0.05, 0.88, 6), frontPoint(i, j, 0.05, 0.88, 17), frontPoint(i, j, 0.05, 0.5, 17)])} fill="#a9dcf5" className="shop-window" />
+          <Box i={i} j={j} h={52} color="#c79a72" inset={0.36} roof="#7a4f3a" />
+          <circle cx={tx} cy={ty + 14} r={5.5} fill="#fff" stroke="#3b2f2a" strokeWidth={1.2} />
+          <path d={`M${tx},${ty + 14} v-3.5 M${tx},${ty + 14} h2.6`} stroke="#3b2f2a" strokeWidth={1.1} fill="none" />
+        </>
+      )
+      break
+    }
+    case 'lycee': {
+      const [x, y] = P(i + 0.5, j + 0.5, 26)
+      body = (
+        <>
+          <Box i={i} j={j} h={26} color="#f6d98b" inset={0.08} roof="#b5523c" floors={2} />
+          <polygon points={pts([frontPoint(i, j, 0.08, 0.4, 0), frontPoint(i, j, 0.08, 0.6, 0), frontPoint(i, j, 0.08, 0.6, 11), frontPoint(i, j, 0.08, 0.4, 11)])} fill="#8a6142" />
+          <rect x={x - 0.8} y={y - 20} width={1.6} height={20} fill="#3b2f2a" />
+          <path d={`M${x + 0.8},${y - 20} l12,4 l-12,4z`} fill="#3987e5" />
+        </>
+      )
+      break
+    }
+    case 'stade':
+      body = (
+        <>
+          <ellipse cx={cx} cy={cy} rx={29} ry={14.5} fill="#9aa0ad" />
+          <ellipse cx={cx} cy={cy - 9} rx={29} ry={14.5} fill="#d5d8de" stroke="#9aa0ad" strokeWidth={1} />
+          <ellipse cx={cx} cy={cy - 7} rx={20} ry={10} fill="#5fb85a" stroke="#fff" strokeWidth={1} />
+          <path d={`M${cx},${cy - 17} v20`} stroke="#fff" strokeWidth={0.9} />
+          <ellipse cx={cx} cy={cy - 7} rx={5} ry={2.5} fill="none" stroke="#fff" strokeWidth={0.9} />
+        </>
+      )
+      break
+    case 'bourse': {
+      const [x, y] = P(i + 0.5, j + 0.5, 128)
+      body = (
+        <>
+          <Box i={i} j={j} h={128} color="#6f8fd0" inset={0.2} roof="#3d4f7c" floors={12} />
+          <Lights i={i} j={j} inset={0.2} h={128} rows={12} seed={7} />
+          <rect x={x - 0.8} y={y - 22} width={1.6} height={22} fill="#3b2f2a" />
+          <circle cx={x} cy={y - 23} r={2.2} fill="#e8472b" />
+        </>
+      )
+      break
+    }
+    case 'universite': {
+      const [x, y] = P(i + 0.5, j + 0.5, 30)
+      body = (
+        <>
+          <Box i={i} j={j} h={30} color="#efe7d3" inset={0.07} roof="#b9a98a" />
+          {[0.14, 0.3, 0.46, 0.62, 0.78].map((t) => (
+            <polygon key={t} points={pts([frontPoint(i, j, 0.07, t, 0), frontPoint(i, j, 0.07, t + 0.07, 0), frontPoint(i, j, 0.07, t + 0.07, 22), frontPoint(i, j, 0.07, t, 22)])} fill="#fff" stroke="#cfc4a8" strokeWidth={0.5} />
+          ))}
+          <path d={`M${x - 12},${y} a12,11 0 0 1 24,0z`} fill="#6fae9c" stroke="#4d8a7a" strokeWidth={1} />
+        </>
+      )
+      break
+    }
+    default: {
+      // Phare : tour blanche à bandes rouges, lanterne allumée le soir.
+      const top = cy - 74
+      body = (
+        <>
+          <Box i={i} j={j} h={10} color="#d9d2c0" inset={0.2} roof="#b9b29f" />
+          <path d={`M${cx - 9},${cy - 10} L${cx - 5.5},${top} h11 L${cx + 9},${cy - 10}Z`} fill="#fbfaf6" stroke="#b9b29f" strokeWidth={1} />
+          <path d={`M${cx - 8.2},${cy - 28} L${cx - 7.2},${cy - 40} h14.4 L${cx + 8.2},${cy - 28}Z`} fill="#d9433b" />
+          <path d={`M${cx - 6.6},${cy - 52} L${cx - 6},${cy - 62} h12 L${cx + 6.6},${cy - 52}Z`} fill="#d9433b" />
+          <rect x={cx - 7} y={top - 9} width={14} height={9} rx={2} fill="#fff3b0" stroke="#3b2f2a" strokeWidth={1} className="shop-window" />
+          <path d={`M${cx - 8},${top - 9} L${cx},${top - 17} L${cx + 8},${top - 9}Z`} fill="#3b2f2a" />
+        </>
+      )
+    }
+  }
+  return (
+    <g data-parcel={parcel.id} className={locked ? 'locked-parcel' : undefined}>
+      {body}
+    </g>
+  )
+}
 
 /** Fenêtres allumées le soir : quelques-unes par étage, toujours les mêmes pour un immeuble donné. */
 function Lights({ i, j, inset, h, rows, seed }: { i: number; j: number; inset: number; h: number; rows: number; seed: number }) {

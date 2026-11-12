@@ -1,4 +1,4 @@
-import { ROADS, getParcel, parcelTraffic } from './city'
+import { districtUnlocked, getParcel, isFronted, locationFit, parcelTraffic } from './city'
 import { currentRank } from './objectives'
 import { getSector } from './sectors'
 import type { Business, GameState, Parcel, RivalShop } from './types'
@@ -93,8 +93,7 @@ export function pressureAt(s: GameState, p: Parcel): number {
 /** Emplacements possibles : immeubles donnant sur une rue (les locaux « à louer » restent pour le joueur). */
 function spots(s: GameState): Parcel[] {
   const used = new Set([...s.rivals.map((r) => r.parcelId), ...s.businesses.map((b) => b.parcelId)])
-  const fronted = (p: Parcel) => ROADS.some((r) => Math.abs(p.i - r) === 1 || Math.abs(p.j - r) === 1)
-  return s.city.parcels.filter((p) => p.kind === 'building' && fronted(p) && !used.has(p.id))
+  return s.city.parcels.filter((p) => p.kind === 'building' && isFronted(p) && districtUnlocked(s, p.districtId) && !used.has(p.id))
 }
 
 /** Nombre de boutiques concurrentes que la ville peut accueillir : il grandit avec votre réussite. */
@@ -131,7 +130,7 @@ function openRival(s: GameState, starting: boolean): RivalShop | null {
     free = free.filter((p) => distance(p, here) >= 2 && distance(p, here) <= RIVAL_RADIUS)
   }
   if (!free.length) return null
-  const score = (p: Parcel) => parcelTraffic(p) * randRange(s, 0.6, 1.4)
+  const score = (p: Parcel) => parcelTraffic(p) * locationFit(s.city, p, sectorId) * randRange(s, 0.6, 1.4)
   const parcel = free.map((p) => ({ p, v: score(p) })).sort((a, b) => b.v - a.v)[0].p
   const shop: RivalShop = {
     id: newId(s, 'r'),
@@ -179,7 +178,7 @@ export function rivalsDay(s: GameState, playerAttraction: (b: Business) => numbe
       if (o.id !== r.id && o.brandId !== r.brandId && o.sectorId === r.sectorId) pressure += weight(distance(here, getParcel(s.city, o.parcelId))) * rivalAttraction(o) * 0.5
     r.share = own / (own + RIVAL_PRESSURE * pressure)
     const sector = getSector(r.sectorId)
-    r.customers = Math.round(parcelTraffic(here) * sector.trafficMult * s.economy * (s.sectorTrends[r.sectorId] ?? 1) * (0.6 + r.reputation / 125) * r.share)
+    r.customers = Math.round(parcelTraffic(here) * locationFit(s.city, here, r.sectorId) * sector.trafficMult * s.economy * (s.sectorTrends[r.sectorId] ?? 1) * (0.6 + r.reputation / 125) * r.share)
 
     // La réputation suit la qualité des produits.
     r.reputation = clamp(r.reputation + (35 + r.quality * 0.5 - r.reputation) * 0.03 + (rand(s) - 0.5) * 0.6, 5, 95)

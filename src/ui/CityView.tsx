@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getParcel, isFree, parcelRent, parcelTraffic } from '../game/city'
+import { districtRank, districtUnlocked, getLandmark, getParcel, isFree, locationFit, locationPerks, parcelRent, parcelTraffic } from '../game/city'
 import { HQ_LEVELS, HQ_RANK, hqLevel, hqOpeningCost, hqUnlocked, maxBusinesses, openHq } from '../game/hq'
 import { WAREHOUSE_DISTRICT, canOpenWarehouseHere, openWarehouse, servedShops, warehouseLevel, warehouseOf, warehouseOpeningCost, warehouseStock } from '../game/warehouse'
 import { businessAttraction, buyRival, buyRivalBlock, openBusiness, openingCost, serviceCapacity } from '../game/engine'
@@ -8,7 +8,7 @@ import { SLOT_NAMES } from '../game/schedule'
 import { WEATHER_NAMES } from '../game/weather'
 import { businessAlerts } from './phone/apps'
 import { isSectorUnlocked, sectorUnlockRank } from '../game/objectives'
-import { SECTORS, getDistrict, getSector } from '../game/sectors'
+import { DISTRICTS, SECTORS, getDistrict, getSector } from '../game/sectors'
 import type { GameState } from '../game/types'
 import { CityMap, type LocalEventMark, type Overlay, type Phase, type RivalMark, type ShopStatus, type WarehouseMark } from './city/CityMap'
 import { eur, num, signed } from './format'
@@ -109,6 +109,9 @@ export function CityView({
       ? victimsOf(state, rival).map((b) => `${rival.parcelId}>${b.parcelId}`).join('|')
       : ''
   const links = useMemo<[string, string][]>(() => (linkKey ? linkKey.split('|').map((k) => k.split('>') as [string, string]) : []), [linkKey])
+  const locked = DISTRICTS.filter((d) => !districtUnlocked(state, d.id)).map((d) => `${d.id}:${districtRank(d.id)}`).join(',')
+  const lockedLot = !!parcel && parcel.kind === 'lot' && !districtUnlocked(state, parcel.districtId)
+  const landmark = parcel?.landmarkId ? getLandmark(parcel.landmarkId) : undefined
   const phase = useDayPhase(running)
   const closed = state.businesses.filter((b) => !b.hours[phase]).map((b) => b.parcelId).join(',')
   const statusKey = state.businesses.map((b) => `${b.id}:${businessAlerts(b).join('+')}`).join('|')
@@ -154,6 +157,7 @@ export function CityView({
         status={status}
         localEvents={localEvents}
         pressure={pressure}
+        locked={locked}
         selectedId={selectedId}
         overlay={overlay}
         onSelect={(id) => {
@@ -289,6 +293,7 @@ export function CityView({
                   <small>loyer/mois</small>
                 </div>
               </div>
+              <LocationPerks state={state} parcelId={parcel.id} />
               {atLimit ? (
                 <p className="small warn">
                   Vous gérez déjà {state.businesses.length} commerces, le maximum{' '}
@@ -419,7 +424,49 @@ export function CityView({
             />
           )}
 
-          {!business && !vacant && !isHq && !warehouse && !rival && (
+          {landmark && !business && (
+            <>
+              <div className="sheet-title">
+                <span className="sector-badge" style={{ background: '#3d4f7c' }}>
+                  <Icon name="pin" size={20} />
+                </span>
+                <div>
+                  <h3>{landmark.name}</h3>
+                  <span className="muted small">
+                    Lieu remarquable · {getDistrict(parcel.districtId).name}
+                  </span>
+                </div>
+              </div>
+              <p className="small">{landmark.description} Les commerces installés à moins de 3 rues en profitent, surtout les plus proches :</p>
+              <div className="perk-list">
+                {Object.entries(landmark.boost)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([id, v]) => (
+                    <span key={id} className="perk good">
+                      <Icon name={id as IconName} size={13} /> {getSector(id).name} +{Math.round(v * 100)} %
+                    </span>
+                  ))}
+              </div>
+            </>
+          )}
+
+          {lockedLot && !business && (
+            <>
+              <div className="sheet-title">
+                <span className="sector-badge" style={{ background: '#9a9590' }}>
+                  <Icon name="lock" size={20} />
+                </span>
+                <div>
+                  <h3>{getDistrict(parcel.districtId).name}</h3>
+                  <span className="muted small">Quartier ouvert au rang {districtRank(parcel.districtId)}</span>
+                </div>
+              </div>
+              <p className="small">{getDistrict(parcel.districtId).description}</p>
+              <p className="muted small">Remplissez vos objectifs (appli Objectifs) pour pouvoir vous y installer.</p>
+            </>
+          )}
+
+          {!business && !vacant && !isHq && !warehouse && !rival && !landmark && !lockedLot && (
             <>
               <div className="sheet-title">
                 <span className="sector-badge" style={{ background: '#9a9590' }}>
@@ -435,6 +482,32 @@ export function CityView({
               <p className="muted small">Pas disponible pour le moment. Cherchez les panneaux « À louer ».</p>
             </>
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Atouts de l'emplacement : pour chaque secteur, l'effet du quartier et des lieux voisins sur la fréquentation. */
+function LocationPerks({ state, parcelId }: { state: GameState; parcelId: string }) {
+  const parcel = getParcel(state.city, parcelId)
+  const rows = SECTORS.map((sec) => ({ sec, fit: locationFit(state.city, parcel, sec.id) - 1 }))
+    .filter((x) => Math.abs(x.fit) >= 0.02)
+    .sort((a, b) => b.fit - a.fit)
+  const nearby = [...new Set(SECTORS.flatMap((sec) => locationPerks(state.city, parcel, sec.id).filter((x) => x.label.includes('proximité')).map((x) => x.label.replace(' à proximité', ''))))]
+  return (
+    <div className="perks">
+      <span className="small muted">
+        {getDistrict(parcel.districtId).description}
+        {nearby.length > 0 && ` À proximité : ${nearby.join(', ')}.`}
+      </span>
+      {rows.length > 0 && (
+        <div className="perk-list">
+          {rows.map(({ sec, fit }) => (
+            <span key={sec.id} className={`perk ${fit > 0 ? 'good' : 'bad'}`}>
+              <Icon name={sec.id as IconName} size={13} /> {sec.name} {pctSigned(fit)}
+            </span>
+          ))}
         </div>
       )}
     </div>
@@ -532,13 +605,17 @@ function SectorPicker({
             const cost = openingCost(state, s.id, parcelId)
             const tooExpensive = cost > state.cash
             const locked = !isSectorUnlocked(state, s.id)
+            const fit = locationFit(state.city, getParcel(state.city, parcelId), s.id) - 1
             return (
               <button key={s.id} className={`choice ${locked ? 'is-locked' : ''}`} disabled={tooExpensive || locked} onClick={() => setSectorId(s.id)}>
                 <span className="sector-badge" style={{ background: s.color }}>
                   <Icon name={s.id as IconName} size={20} />
                 </span>
                 <span className="choice-main">
-                  <strong>{s.name}</strong>
+                  <strong>
+                    {s.name}
+                    {Math.abs(fit) >= 0.02 && <span className={`small fit-tag ${fit > 0 ? 'good' : 'bad'}`}>{pctSigned(fit)} ici</span>}
+                  </strong>
                   <span className="muted small">{s.description}</span>
                 </span>
                 {locked ? (

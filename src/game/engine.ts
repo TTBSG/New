@@ -5,7 +5,7 @@ import { autoReplace } from './replace'
 import { benefitsPerEmployee, makeCandidate } from './staff'
 import { employeeFromCandidate, employeesDay, fairSalary, migrateEmployee, refreshCandidates as refreshStaffCandidates, salesFactor, serviceQuality, TRIAL_DAYS } from './staff'
 import { STARTING_SECTORS, checkObjectives, currentRank, isSectorUnlocked, sectorUnlockRank, setNetWorth } from './objectives'
-import { generateCity, getParcel, isFree, parcelRent, parcelTraffic } from './city'
+import { buildCity, districtUnlocked, generateCity, getParcel, isFree, locationFit, parcelRent, parcelTraffic } from './city'
 import { canDelegate, loanRateCut, marketingBoost, maxBusinesses, payHq, refreshOfficeCandidates, startingReputation } from './hq'
 import { LOCAL_EVENTS, RANDOM_EVENTS, SECTORS, getDistrict, getSector } from './sectors'
 import { WEATHER_NAMES, nextWeather, weatherMult } from './weather'
@@ -18,7 +18,7 @@ import { clamp, log, newId, pick, rand, randRange, round2, update } from './util
 export { rand }
 export { fairSalary, unitCost }
 
-export const SAVE_VERSION = 12
+export const SAVE_VERSION = 13
 export const START_CASH = 60000
 const HISTORY_DAYS = 120
 const BANKRUPTCY_DAYS = 30
@@ -121,7 +121,7 @@ export function newGame(seed = Date.now() % 2147483647): GameState {
     sectorTrends: Object.fromEntries(SECTORS.map((x) => [x.id, 1])),
     events: [],
     weather: 'nuages',
-    city: { size: 0, roads: [], parcels: [] },
+    city: { width: 0, height: 0, roadsI: [], roadsJ: [], parcels: [] },
     hq: null,
     officeCandidates: [],
     warehouses: [],
@@ -175,7 +175,9 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
   const competition = competitionFactor(s, b, businessAttraction(s, b))
   const visitors = Math.round(
     competition *
-    parcelTraffic(parcel) *
+      parcelTraffic(parcel) *
+      // Clientèle du quartier et lieux remarquables voisins (gare, lycée…).
+      locationFit(s.city, parcel, b.sectorId) *
       sector.trafficMult *
       WEEKDAY_TRAFFIC[weekday(s.day)] *
       s.economy *
@@ -327,7 +329,7 @@ function updateMarket(s: GameState) {
   if (rand(s) < 1 / 9) {
     const tpl = pick(s, LOCAL_EVENTS)
     const districtId = pick(s, tpl.districts)
-    if (!s.events.some((e) => e.districtId === districtId)) {
+    if (districtUnlocked(s, districtId) && !s.events.some((e) => e.districtId === districtId)) {
       const mult = round2(randRange(s, tpl.mult[0], tpl.mult[1]))
       const duration = Math.round(randRange(s, tpl.days[0], tpl.days[1]))
       s.events.push({ id: newId(s, 'e'), title: tpl.title, description: tpl.description, sectorId: null, districtId, demandMult: mult, endsDay: s.day + duration - 1 })
@@ -428,7 +430,7 @@ export function openBusiness(state: GameState, sectorId: string, parcelId: strin
 /** Crée le commerce sur la parcelle et achète son stock de départ. */
 function createBusiness(s: GameState, sectorId: string, parcel: Parcel, name: string, reputation: number): Business {
   const sector = getSector(sectorId)
-  const traffic = parcelTraffic(parcel)
+  const traffic = parcelTraffic(parcel) * locationFit(s.city, parcel, sectorId)
   const b: Business = {
     id: newId(s, 'b'),
     name: name.trim() || `${sector.name} ${parcel.address}`,
@@ -717,6 +719,16 @@ export function migrate(raw: GameState): GameState | null {
   if (s.version === 11) {
     s.weather = 'nuages'
     s.version = 12
+  }
+  if (s.version === 12) {
+    // La ville s'agrandit : nouvelles colonnes à l'est, et un lieu remarquable par quartier.
+    const taken = [...s.businesses.map((b) => b.parcelId), ...s.rivals.map((r) => r.parcelId), ...s.warehouses.map((w) => w.parcelId), ...(s.hq ? [s.hq.parcelId] : [])]
+    s.city = buildCity(() => rand(s), s.city.parcels, taken)
+    advisorMessage(s, [
+      'La ville s\'agrandit ! Deux nouveaux quartiers apparaissent à l\'est : le Campus (rang 3) et le Port (rang 4).',
+      'Chaque quartier a désormais sa clientèle, et des lieux comme la gare, le lycée ou le stade attirent du monde autour d\'eux. Touchez un local à louer : la fiche indique les atouts de l\'emplacement pour chaque type de commerce.',
+    ])
+    s.version = 13
   }
   return s.version === SAVE_VERSION ? s : null
 }
