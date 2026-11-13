@@ -98,7 +98,7 @@ function spots(s: GameState): Parcel[] {
 
 /** Nombre de boutiques concurrentes que la ville peut accueillir : il grandit avec votre réussite. */
 export function rivalCap(s: GameState): number {
-  return Math.min(16, 4 + 2 * (Math.min(5, currentRank(s)) - 1) + s.businesses.length)
+  return Math.min(45, 4 + 3 * (Math.min(7, currentRank(s)) - 1) + s.businesses.length)
 }
 
 /** Jours de tranquillité d'un nouveau commerce avant qu'une enseigne ne vienne s'installer à côté. */
@@ -119,7 +119,7 @@ function openRival(s: GameState, starting: boolean): RivalShop | null {
       : s.businesses.filter((b) => s.day - b.openedDay >= GRACE_DAYS && rivalsNear(s, b) < maxNearby(s) && (b.history.at(-1)?.profit ?? 0) > 0)
   const target = targets.length && rand(s) < 0.7 ? pick(s, targets) : null
   // Les implantations « au hasard » restent peu nombreuses : la place est gardée pour celles qui vous visent.
-  if (!starting && !target && s.rivals.length >= 3 + Math.min(5, currentRank(s))) return null
+  if (!starting && !target && s.rivals.length >= 3 + 2 * Math.min(7, currentRank(s))) return null
   const brand = pick(s, target ? RIVAL_BRANDS.filter((x) => x.sectors.includes(target.sectorId)) : RIVAL_BRANDS)
   const sectorId = target ? target.sectorId : pick(s, brand.sectors)
   let free = spots(s).filter((p) => !s.rivals.some((r) => r.sectorId === sectorId && r.brandId === brand.id && distance(p, getParcel(s.city, r.parcelId)) <= 2))

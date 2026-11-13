@@ -10,7 +10,9 @@ import { log, newId, round2, update } from './util'
 /** Rang nécessaire pour ouvrir un entrepôt (avec un directeur logistique au siège). */
 export const WAREHOUSE_RANK = 4
 /** Les entrepôts s'installent dans la zone commerciale, là où se trouve l'activité logistique. */
-export const WAREHOUSE_DISTRICT = 'commercial'
+/** Quartiers où l'on peut installer un entrepôt. */
+export const WAREHOUSE_DISTRICTS = ['commercial', 'industrie']
+export const WAREHOUSE_DISTRICT = WAREHOUSE_DISTRICTS[0]
 
 export const WAREHOUSE_LEVELS = [
   { name: 'Petit entrepôt', cost: 30000, rentMult: 0.7, capacity: 20000, height: 22 },
@@ -137,7 +139,7 @@ export function warehouseOpeningCost(s: GameState, parcelId: string): number {
 
 export function canOpenWarehouseHere(s: GameState, parcelId: string): boolean {
   const p = s.city.parcels.find((x) => x.id === parcelId)
-  return !!p && p.kind === 'lot' && p.districtId === WAREHOUSE_DISTRICT && isFree(s, p) && warehousesUnlocked(s)
+  return !!p && p.kind === 'lot' && WAREHOUSE_DISTRICTS.includes(p.districtId) && isFree(s, p) && warehousesUnlocked(s)
 }
 
 export function openWarehouse(state: GameState, parcelId: string, sectorId: string): GameState {

@@ -1,4 +1,4 @@
-import { getSector } from './sectors'
+import { districtOfParcel, getSector } from './sectors'
 import { CHEF, capacityMult } from './staff'
 import type { Business, Employee, GameState, Slot } from './types'
 import { log, update } from './util'
@@ -41,8 +41,18 @@ export function slotCapacity(b: Business): number[] {
 
 /** Répartition des clients sur les créneaux ouverts (les créneaux fermés perdent leurs clients). */
 export function slotShares(b: Business): number[] {
-  const share = getSector(b.sectorId).slotShare
+  const share = dayProfile(b)
   return SLOTS.map((slot) => (b.hours[slot] ? share[slot] : 0))
+}
+
+/** Répartition des clients sur la journée : le rythme du secteur, déformé par celui du quartier (somme = 1). */
+export function dayProfile(b: Business): number[] {
+  const share = getSector(b.sectorId).slotShare
+  const bias = districtOfParcel(b.parcelId).slots
+  if (!bias) return [...share]
+  const raw = SLOTS.map((slot) => share[slot] * bias[slot])
+  const total = raw.reduce((a, x) => a + x, 0)
+  return raw.map((x) => x / total)
 }
 
 /** Place un employé sur ses n meilleurs créneaux, là où il manque le plus de monde. */

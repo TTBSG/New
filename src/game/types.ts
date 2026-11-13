@@ -50,6 +50,14 @@ export interface DistrictDef {
   /** Clientèle du quartier : multiplicateur de fréquentation par secteur (1 si absent). */
   fit: Record<string, number>
   description: string
+  /** Position dans la ville : colonne (ouest → est) et rangée (nord → sud). */
+  cell: [number, number]
+  /** Rythme du quartier : poids du matin, du midi et du soir (absent = rythme normal du commerce). */
+  slots?: [number, number, number]
+  /** Saisonnalité : multiplicateur de fréquentation pour chacun des 12 mois. */
+  season?: number[]
+  /** Fréquentation du samedi et du dimanche par rapport à la semaine. */
+  weekend?: number
 }
 
 export type ParcelKind = 'lot' | 'building' | 'park' | 'landmark'
@@ -441,5 +449,7 @@ export interface GameState {
   objectivesDone: string[]
   unlockedSectors: string[]
   celebrations: Celebration[]
+  /** Quartiers dont vous êtes le leader (mis à jour chaque jour). */
+  leaders: string[]
   nextId: number
 }

@@ -32,7 +32,7 @@ describe('messages', () => {
   it('accepter une demande d\'augmentation change le salaire et remonte le moral', () => {
     // Des salaires en dessous du marché provoquent des demandes.
     let s = cafe()
-    s = { ...s, businesses: s.businesses.map((b) => ({ ...b, employees: b.employees.map((e) => ({ ...e, salary: e.salary - 150 })) })) }
+    s = { ...s, businesses: s.businesses.map((b) => ({ ...b, employees: b.employees.map((e) => ({ ...e, salary: Math.round(e.salary * 0.85) })) })) }
     s = runUntil(s, 'raise')
     const c = s.inbox.find((x) => x.kind === 'raise' && x.choices.length)!
     expect(c).toBeDefined()
@@ -84,8 +84,8 @@ describe('messages', () => {
         delete p.auto
       }
     const migrated = migrate(old as unknown as GameState)!
-    expect(migrated.version).toBe(13)
-    expect(migrated.inbox).toHaveLength(7)
+    expect(migrated.version).toBe(14)
+    expect(migrated.inbox).toHaveLength(8)
     expect(migrated.rivals.length).toBeGreaterThan(0)
     expect(migrated.objectivesDone).toContain('open_first')
     expect(migrated.businesses[0].rentMult).toBe(1)

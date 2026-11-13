@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type WheelEvent as RWheelEvent } from 'react'
 import { getLandmark, isRoad, parcelRent, parcelTraffic } from '../../game/city'
+import { DISTRICTS, DISTRICT_SPAN } from '../../game/sectors'
 import type { Business, City, Parcel } from '../../game/types'
 import { signed } from '../format'
 import { Icon, type IconName } from '../icons'
@@ -24,7 +25,9 @@ function mix(a: string, b: string, t: number): string {
   return '#' + ca.map((v, k) => Math.round(v + (cb[k] - v) * t).toString(16).padStart(2, '0')).join('')
 }
 
-const MIN_K = 0.45
+const MIN_K = 0.24
+/** En dessous de ce zoom, on masque les détails (fenêtres, passants) pour garder la carte fluide. */
+const FAR_K = 0.6
 const MAX_K = 2.4
 
 interface View {
@@ -81,33 +84,29 @@ const Ground = memo(function Ground({ city, overlay, pressure, locked }: { city:
 export type WarehouseMark = { parcelId: string; sectorId: string; height: number; shops: string[] }
 export type RivalMark = { parcelId: string; sectorId: string; color: string }
 
-const Objects = memo(function Objects({
-  city,
+/** Les bâtiments d'un quartier. Chaque quartier est dessiné à part : seuls ceux qui sont à l'écran existent dans la page. */
+const DistrictObjects = memo(function DistrictObjects({
+  parcels,
   shops,
   hq,
   warehouses,
   rivals,
   closed,
   locked,
-  faded,
 }: {
-  city: City
+  parcels: Parcel[]
   shops: Record<string, string>
   hq: { parcelId: string; height: number } | null
   warehouses: WarehouseMark[]
   rivals: RivalMark[]
   /** Parcelles des commerces fermés sur le créneau affiché, séparées par des virgules. */
   closed: string
-  /** Quartiers pas encore débloqués, séparés par des virgules. */
-  locked: string
-  faded: boolean
+  locked: boolean
 }) {
   const closedSet = useMemo(() => new Set(closed.split(',')), [closed])
-  const lockedSet = useMemo(() => new Set(locked.split(',')), [locked])
-  const sorted = useMemo(() => [...city.parcels].sort((a, b) => a.i + a.j - (b.i + b.j) || a.i - b.i), [city])
   return (
-    <g className={faded ? 'faded' : undefined}>
-      {sorted.map((p) => (
+    <g>
+      {parcels.map((p) => (
         <ParcelObject
           key={p.id}
           parcel={p}
@@ -116,12 +115,25 @@ const Objects = memo(function Objects({
           warehouse={warehouses.find((w) => w.parcelId === p.id)}
           rivalColor={rivals.find((r) => r.parcelId === p.id)?.color}
           closed={closedSet.has(p.id)}
-          locked={lockedSet.has(p.districtId)}
+          locked={locked}
         />
       ))}
     </g>
   )
 })
+
+/** Géométrie d'un quartier : coins de son carré, centre et carrefour intérieur. */
+const districtGeo = DISTRICTS.map((d) => {
+  const i0 = d.cell[0] * DISTRICT_SPAN
+  const j0 = d.cell[1] * DISTRICT_SPAN
+  const inner = (c: number) => (c === 0 ? 2 : c * DISTRICT_SPAN + 3)
+  // Boîte englobante à l'écran, avec de la marge en haut pour les tours.
+  const xs = [P(i0, j0 + 6)[0], P(i0 + 6, j0)[0]]
+  const ys = [P(i0, j0)[1] - 150, P(i0 + 6, j0 + 6)[1] + 10]
+  const short = d.name.replace(/^Quartier (d'|des |)/, '').replace(/^Zone /, 'Zone ').toUpperCase()
+  return { id: d.id, order: d.cell[0] + d.cell[1], label: short, center: [i0 + 3.5, j0 + 3.5] as [number, number], spot: [inner(d.cell[0]), inner(d.cell[1])] as [number, number], box: { x0: xs[0], x1: xs[1], y0: ys[0], y1: ys[1] } }
+}).sort((a, b) => a.order - b.order)
+const geoOf = (id: string) => districtGeo.find((g) => g.id === id)!
 
 const WALKER_COLORS = ['#5c8de8', '#d65db1', '#4cb86b', '#f2b134', '#e8743b', '#8a6142']
 
@@ -195,17 +207,16 @@ const Traffic = memo(function Traffic({ city }: { city: City }) {
   return (
     <g pointerEvents="none">
       {cars}
-      {walkers}
+      <g className="lod">{walkers}</g>
     </g>
   )
 })
 
 /** Carrefour intérieur de chaque quartier : c'est là que s'installent marchés, festivals et chantiers. */
-const DISTRICT_SPOT: Record<string, [number, number]> = { residentiel: [2, 2], affaires: [10, 2], commercial: [2, 10], centre: [10, 10], campus: [17, 2], port: [17, 10] }
 const TENT_COLORS = ['#e85d8a', '#f2b134', '#5c8de8', '#4cb86b']
 
 const EventDecor = memo(function EventDecor({ districtId, positive }: { districtId: string; positive: boolean }) {
-  const [ci, cj] = DISTRICT_SPOT[districtId]
+  const [ci, cj] = geoOf(districtId).spot
   const spots: [number, number][] = [
     [ci + 0.5, cj - 0.6],
     [ci + 0.5, cj + 1.6],
@@ -261,16 +272,6 @@ const Trucks = memo(function Trucks({ from, to }: { from: Parcel; to: Parcel[] }
   )
 })
 
-const DISTRICT_AT: Record<string, string> = { RÉSIDENTIEL: 'residentiel', AFFAIRES: 'affaires', COMMERCIAL: 'commercial', 'CENTRE-VILLE': 'centre', CAMPUS: 'campus', PORT: 'port' }
-const DISTRICT_LABELS: [number, number, string][] = [
-  [3.5, 3.5, 'RÉSIDENTIEL'],
-  [9.5, 3.5, 'AFFAIRES'],
-  [3.5, 9.5, 'COMMERCIAL'],
-  [9.5, 9.5, 'CENTRE-VILLE'],
-  [16.5, 3.5, 'CAMPUS'],
-  [16.5, 9.5, 'PORT'],
-]
-
 export function CityMap({
   city,
   businesses,
@@ -284,6 +285,8 @@ export function CityMap({
   localEvents,
   pressure,
   locked,
+  leaders,
+  focus,
   selectedId,
   overlay,
   onSelect,
@@ -304,6 +307,10 @@ export function CityMap({
   pressure: Record<string, number>
   /** Quartiers pas encore débloqués et rang nécessaire : « campus:3,port:4 ». */
   locked: string
+  /** Quartiers dont le joueur est le leader, séparés par des virgules. */
+  leaders: string
+  /** Demande de recentrage (mini-carte) : point de la grille à mettre au centre de l'écran. */
+  focus: { i: number; j: number; nonce: number } | null
   selectedId: string | null
   overlay: Overlay
   onSelect: (parcelId: string | null) => void
@@ -342,6 +349,16 @@ export function CityMap({
     // On centre sur les quatre quartiers du départ ; les nouveaux se découvrent en faisant glisser la carte.
     setView(clamp({ k, x: size.w / 2 - OX * k, y: size.h * 0.5 - (OY + 6.5 * TH) * k }))
   }, [size, view, clamp])
+
+  // Recentrage demandé par la mini-carte.
+  const focusNonce = focus?.nonce
+  useEffect(() => {
+    if (!focus) return
+    const [x, y] = P(focus.i, focus.j)
+    const k = Math.max(0.75, Math.min(1, size.w / 440))
+    setView(clamp({ k, x: size.w / 2 - x * k, y: size.h * 0.45 - y * k }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- on ne recentre qu'à une nouvelle demande
+  }, [focusNonce])
 
   const zoomAt = useCallback(
     (cx: number, cy: number, factor: number) => {
@@ -420,10 +437,24 @@ export function CityMap({
   const selected = selectedId ? parcelsById[selectedId] : null
   const lockedRanks = useMemo(() => Object.fromEntries(locked.split(',').filter(Boolean).map((x) => x.split(':'))), [locked]) as Record<string, string>
   const lockedIds = Object.keys(lockedRanks).join(',')
+  const leaderSet = new Set(leaders.split(','))
+  const byDistrict = useMemo(() => {
+    const groups: Record<string, Parcel[]> = {}
+    for (const p of [...city.parcels].sort((a, b) => a.i + a.j - (b.i + b.j) || a.i - b.i)) (groups[p.districtId] ??= []).push(p)
+    return groups
+  }, [city])
+  // Quartiers visibles à l'écran : les autres ne sont pas dessinés.
+  const visible = (id: string) => {
+    if (!view) return false
+    const b = geoOf(id).box
+    const x0 = -view.x / view.k
+    const y0 = -view.y / view.k
+    return b.x1 > x0 && b.x0 < x0 + size.w / view.k && b.y1 > y0 && b.y0 < y0 + size.h / view.k
+  }
   const landmarks = useMemo(() => city.parcels.filter((p) => p.landmarkId), [city])
 
   return (
-    <div className={`citymap phase-${phase} ${overlay !== 'none' ? 'analysis' : ''}`} ref={wrapRef}>
+    <div className={`citymap phase-${phase} ${overlay !== 'none' ? 'analysis' : ''} ${view && view.k < FAR_K ? 'far' : ''}`} ref={wrapRef}>
       {view && (
         <svg
           width={size.w}
@@ -447,7 +478,11 @@ export function CityMap({
             {overlay === 'none' && <Traffic city={city} />}
             {overlay === 'none' && localEvents.map((e) => <EventDecor key={e.districtId} districtId={e.districtId} positive={e.mult >= 1} />)}
             {selected && <polygon points={diamond(selected.i, selected.j, 0.04)} fill="none" stroke="#e8743b" strokeWidth={3} className="sel-ring" />}
-            <Objects city={city} shops={shops} hq={hq} warehouses={warehouses} rivals={rivals} closed={closed} locked={lockedIds} faded={overlay !== 'none'} />
+            <g className={overlay !== 'none' ? 'faded' : undefined}>
+              {districtGeo.map(
+                (d) => visible(d.id) && <DistrictObjects key={d.id} parcels={byDistrict[d.id] ?? []} shops={shops} hq={hq} warehouses={warehouses} rivals={rivals} closed={closed} locked={d.id in lockedRanks} />,
+              )}
+            </g>
             {/* Lumière du moment : aube dorée le matin, bleu nuit le soir. */}
             {overlay === 'none' && <rect x={-3000} y={-3000} width={8000} height={8000} className="daylight" pointerEvents="none" />}
             {links.map(([from, to]) => {
@@ -469,19 +504,20 @@ export function CityMap({
                   </g>
                 )
               })}
-            {DISTRICT_LABELS.map(([a, b, name]) => {
-              const [x, y] = P(a, b)
-              const rank = lockedRanks[DISTRICT_AT[name]]
-              const t = rank ? `${name} · RANG ${rank}` : name
+            {districtGeo.map(({ id, label: name, center }) => {
+              const [x, y] = P(center[0], center[1])
+              const rank = lockedRanks[id]
+              const leader = leaderSet.has(id)
+              const t = rank ? `${name} · RANG ${rank}` : leader ? `${name} · LEADER` : name
               const lw = Math.max(96, t.length * 6.6 + 18)
               return (
-                <g key={name} pointerEvents="none">
-                  <rect x={x - lw / 2} y={y - 10} width={lw} height={20} rx={10} fill="#3b2f2a" opacity={0.72} />
+                <g key={id} pointerEvents="none">
+                  <rect x={x - lw / 2} y={y - 10} width={lw} height={20} rx={10} fill={leader ? '#c2560f' : '#3b2f2a'} opacity={leader ? 0.92 : 0.72} />
                   <text x={x} y={y + 4} textAnchor="middle" fontSize={10} fontWeight={800} fill="#fff" fontFamily="Nunito, system-ui">
                     {t}
                   </text>
                   {localEvents
-                    .filter((e) => DISTRICT_AT[name] === e.districtId)
+                    .filter((e) => e.districtId === id)
                     .map((e) => {
                       const label = `${e.title} ${e.mult >= 1 ? '+' : '−'}${Math.abs(Math.round((e.mult - 1) * 100))} %`
                       const w = label.length * 5.6 + 16

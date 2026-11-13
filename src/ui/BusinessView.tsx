@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   businessAttraction,
-  eventsFor,
+  trafficFactors,
   businessValue,
   monthlyWages,
   perceivedPrice,
@@ -15,7 +15,7 @@ import {
 import { expiringToday, productDef, stockOf } from '../game/stock'
 import { autoTarget, costOf, getSupplier, pendingOrders, sectorSuppliers, setAuto, setProductSupplier, suppliersUnlocked, SUPPLIERS_RANK } from '../game/supply'
 import { getParcel } from '../game/city'
-import { WEATHER_NAMES, weatherMult } from '../game/weather'
+import { districtOfParcel } from '../game/sectors'
 import { diagnose } from '../game/diagnose'
 import { getSector } from '../game/sectors'
 import type { Business, GameState, ProductState } from '../game/types'
@@ -108,18 +108,15 @@ function Overview({ state, b, act, onBack }: { state: GameState; b: Business; ac
           Vendre
         </button>
       </Section>
-      <Section title="Ce qui joue sur la fréquentation" right={<span className="muted small">{WEATHER_NAMES[state.weather]}</span>}>
-        <p className="small">
-          <strong>Météo : {WEATHER_NAMES[state.weather].toLowerCase()}</strong> — {pctSigned(weatherMult(state.weather, b.sectorId) - 1)} de passants pour ce type de commerce.
-        </p>
-        {eventsFor(state, b).map((e) => (
-          <p key={e.id} className="small">
-            <strong>
-              {e.title} ({pctSigned(e.demandMult - 1)})
-            </strong>{' '}
-            — {e.description}
-          </p>
+      <Section title="Ce qui joue sur la fréquentation" right={<span className="muted small">aujourd'hui</span>}>
+        <p className="small muted">{districtOfParcel(b.parcelId).description}</p>
+        {trafficFactors(state, b).map((f) => (
+          <div key={f.label} className="info-row">
+            <span className="small">{f.label}</span>
+            <strong className={`small ${f.effect > 0 ? 'good' : 'bad'}`}>{pctSigned(f.effect)}</strong>
+          </div>
         ))}
+        {!trafficFactors(state, b).length && <p className="small muted">Rien de particulier aujourd'hui.</p>}
       </Section>
     </>
   )
@@ -281,7 +278,7 @@ function Team({ state, b, act }: { state: GameState; b: Business; act: Act }) {
   )
 }
 
-const pctSigned = (v: number) => (Math.round(v * 100) === 0 ? 'pas d\'effet sur le nombre' : `${v > 0 ? '+' : '−'}${Math.abs(Math.round(v * 100))} %`)
+const pctSigned = (v: number) => `${v > 0 ? '+' : '−'}${Math.abs(Math.round(v * 100))} %`
 
 function Competition({ state, b }: { state: GameState; b: Business }) {
   const threats = threatsFor(state, b, businessAttraction(state, b))

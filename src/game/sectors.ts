@@ -107,14 +107,43 @@ export const SECTORS: SectorDef[] = [
   },
 ]
 
+const SUMMER_MILD = [0.85, 0.85, 0.95, 1, 1.08, 1.15, 1.25, 1.25, 1.08, 0.98, 0.88, 0.95]
+
+/** Les quinze quartiers : trois colonnes (de l'intérieur vers la mer) sur cinq rangées (du nord au sud). */
 export const DISTRICTS: DistrictDef[] = [
-  { id: 'residentiel', name: 'Quartier résidentiel', rentMonthly: 1200, traffic: 230, fit: { boulangerie: 1.12, superette: 1.12, restaurant: 0.92, electronique: 0.92 }, description: 'Des familles et des habitués : le pain et les courses du quotidien.' },
-  { id: 'commercial', name: 'Zone commerciale', rentMonthly: 2600, traffic: 430, fit: { vetements: 1.12, electronique: 1.12, boulangerie: 0.94 }, description: 'On y vient pour faire les magasins.' },
-  { id: 'centre', name: 'Centre-ville', rentMonthly: 3800, traffic: 560, fit: {}, description: 'Tout le monde y passe : aucun commerce n\'y est désavantagé.' },
-  { id: 'affaires', name: 'Quartier d\'affaires', rentMonthly: 5200, traffic: 700, fit: { cafe: 1.12, restaurant: 1.12, superette: 0.9, vetements: 0.94 }, description: 'Des salariés pressés : cafés du matin et déjeuners.' },
-  { id: 'campus', name: 'Campus', rentMonthly: 1700, traffic: 420, fit: { cafe: 1.22, electronique: 1.15, boulangerie: 1.1, restaurant: 0.88, vetements: 0.95 }, description: 'Des étudiants au petit budget : cafés, sandwichs et high-tech.' },
-  { id: 'port', name: 'Port', rentMonthly: 3200, traffic: 540, fit: { restaurant: 1.28, cafe: 1.12, vetements: 1.1, superette: 0.85, electronique: 0.82 }, description: 'Promeneurs et touristes : restaurants et terrasses en bord de mer.' },
+  { id: 'residentiel', cell: [0, 0], name: 'Quartier résidentiel', rentMonthly: 1200, traffic: 230, fit: { boulangerie: 1.12, superette: 1.12, restaurant: 0.92, electronique: 0.92 }, description: 'Des familles et des habitués : le pain et les courses du quotidien.' },
+  { id: 'commercial', cell: [0, 1], name: 'Zone commerciale', rentMonthly: 2600, traffic: 430, fit: { vetements: 1.12, electronique: 1.12, boulangerie: 0.94 }, description: 'On y vient pour faire les magasins.' },
+  { id: 'centre', cell: [1, 1], name: 'Centre-ville', rentMonthly: 3800, traffic: 560, fit: {}, description: 'Tout le monde y passe : aucun commerce n\'y est désavantagé.' },
+  { id: 'affaires', cell: [1, 0], name: 'Quartier d\'affaires', rentMonthly: 5200, traffic: 700, fit: { cafe: 1.12, restaurant: 1.12, superette: 0.9, vetements: 0.94 }, slots: [1.15, 1.15, 0.65], weekend: 0.8, description: 'Des salariés pressés : cafés du matin et déjeuners, calme le soir et le week-end.' },
+  { id: 'campus', cell: [2, 0], name: 'Campus', rentMonthly: 1700, traffic: 420, fit: { cafe: 1.22, electronique: 1.15, boulangerie: 1.1, restaurant: 0.88, vetements: 0.95 }, season: [1, 1, 1, 1, 1, 0.9, 0.65, 0.65, 1.08, 1.08, 1, 1], description: 'Des étudiants au petit budget : cafés, sandwichs et high-tech. Désert pendant les vacances d\'été.' },
+  { id: 'port', cell: [2, 1], name: 'Port', rentMonthly: 3200, traffic: 540, fit: { restaurant: 1.28, cafe: 1.12, vetements: 1.1, superette: 0.85, electronique: 0.82 }, description: 'Promeneurs et touristes : restaurants et terrasses en bord de mer.' },
+  { id: 'faubourg', cell: [0, 2], name: 'Faubourg', rentMonthly: 900, traffic: 190, fit: { superette: 1.18, boulangerie: 1.15, restaurant: 0.85, vetements: 0.9, electronique: 0.9 }, description: 'Banlieue pavillonnaire aux loyers très doux : une clientèle fidèle mais peu nombreuse.' },
+  { id: 'vieille', cell: [1, 2], name: 'Vieille ville', rentMonthly: 3400, traffic: 520, fit: { restaurant: 1.2, cafe: 1.15, vetements: 1.12, superette: 0.88, electronique: 0.82 }, season: SUMMER_MILD, description: 'Ruelles pavées et touristes, surtout à la belle saison.' },
+  { id: 'plage', cell: [2, 2], name: 'Plage', rentMonthly: 2400, traffic: 460, fit: { cafe: 1.2, restaurant: 1.2, vetements: 1.1, boulangerie: 1.05, electronique: 0.75 }, season: [0.45, 0.45, 0.6, 0.8, 1.05, 1.4, 1.75, 1.75, 1.2, 0.8, 0.5, 0.45], weekend: 1.25, description: 'La foule en été, le désert en hiver : un pari saisonnier.' },
+  { id: 'industrie', cell: [0, 3], name: 'Zone industrielle', rentMonthly: 700, traffic: 210, fit: { boulangerie: 1.2, superette: 1.1, cafe: 1.05, restaurant: 0.9, electronique: 0.85, vetements: 0.7 }, slots: [1.35, 1.2, 0.45], weekend: 0.6, description: 'Ouvriers du matin et de midi, loyers au plancher. Les entrepôts y sont les moins chers.' },
+  { id: 'theatres', cell: [1, 3], name: 'Quartier des théâtres', rentMonthly: 3600, traffic: 500, fit: { restaurant: 1.25, cafe: 1.1, boulangerie: 0.85, superette: 0.85 }, slots: [0.5, 0.9, 1.6], weekend: 1.2, description: 'La ville qui sort : tout se joue le soir. Fermer le matin ne coûte presque rien.' },
+  { id: 'chic', cell: [2, 3], name: 'Quartier chic', rentMonthly: 6200, traffic: 480, fit: { vetements: 1.3, restaurant: 1.2, electronique: 1.15, boulangerie: 1.05, superette: 0.8 }, description: 'Une clientèle fortunée face à la marina : boutiques et belles tables, loyers vertigineux.' },
+  { id: 'aeroport', cell: [0, 4], name: 'Aéroport', rentMonthly: 7500, traffic: 900, fit: { cafe: 1.2, electronique: 1.15, vetements: 1.1, boulangerie: 1.1, restaurant: 1.05, superette: 0.7 }, description: 'Un flot de voyageurs du matin au soir, au prix des loyers les plus chers de la ville.' },
+  { id: 'technopole', cell: [1, 4], name: 'Technopole', rentMonthly: 3000, traffic: 480, fit: { cafe: 1.25, electronique: 1.25, restaurant: 1.1, superette: 0.9, vetements: 0.8 }, slots: [1.2, 1.3, 0.5], weekend: 0.5, description: 'Start-up et ingénieurs : café et high-tech en semaine, personne le week-end.' },
+  { id: 'loisirs', cell: [2, 4], name: 'Parc de loisirs', rentMonthly: 2800, traffic: 430, fit: { restaurant: 1.2, cafe: 1.15, vetements: 1.05, electronique: 0.85, superette: 0.8 }, season: [0.7, 0.7, 0.85, 1, 1.1, 1.2, 1.35, 1.35, 1.05, 0.95, 0.75, 0.85], weekend: 1.6, description: 'Les familles s\'y pressent le week-end et pendant les vacances.' },
 ]
+
+/** Chaque quartier occupe un carré de 6 cases ; un grand axe sépare deux quartiers voisins. */
+export const DISTRICT_SPAN = 7
+export const DISTRICT_COLS = 3
+export const DISTRICT_ROWS = 5
+
+export function districtAt(i: number, j: number): string {
+  const col = Math.min(DISTRICT_COLS - 1, Math.floor(i / DISTRICT_SPAN))
+  const row = Math.min(DISTRICT_ROWS - 1, Math.floor(j / DISTRICT_SPAN))
+  return DISTRICTS.find((d) => d.cell[0] === col && d.cell[1] === row)!.id
+}
+
+/** Quartier d'une parcelle à partir de son identifiant « p{i}-{j} ». */
+export function districtOfParcel(parcelId: string): DistrictDef {
+  const [i, j] = parcelId.slice(1).split('-').map(Number)
+  return getDistrict(districtAt(i, j))
+}
 
 /** Fournisseurs spécialisés de chaque secteur (en plus du « Grossiste du Coin », disponible partout). */
 export const SUPPLIER_NAMES: Record<string, { premium: string; eco: string; bulk: string }> = {
@@ -141,13 +170,15 @@ export function getDistrict(id: string): DistrictDef {
 export const FIRST_NAMES = ['Léa', 'Hugo', 'Emma', 'Lucas', 'Chloé', 'Nathan', 'Inès', 'Yanis', 'Manon', 'Karim', 'Sarah', 'Théo', 'Camille', 'Mehdi', 'Julie', 'Antoine', 'Aïcha', 'Louis', 'Zoé', 'Samuel']
 export const LAST_NAMES = ['Martin', 'Bernard', 'Dubois', 'Moreau', 'Laurent', 'Simon', 'Michel', 'Garcia', 'Roux', 'Fournier', 'Benali', 'Girard', 'Bonnet', 'Lambert', 'Diallo', 'Mercier']
 
+const DISTRICT_IDS = ['residentiel', 'commercial', 'centre', 'affaires', 'campus', 'port', 'faubourg', 'vieille', 'plage', 'industrie', 'theatres', 'chic', 'aeroport', 'technopole', 'loisirs']
+
 /** Événements de quartier : ils ne touchent que les commerces du quartier concerné. */
 export const LOCAL_EVENTS: { title: string; description: string; districts: string[]; mult: [number, number]; days: [number, number] }[] = [
-  { title: 'Marché de quartier', description: 'Les étals attirent du monde dans les rues.', districts: ['residentiel', 'centre', 'port'], mult: [1.18, 1.3], days: [1, 2] },
-  { title: 'Travaux de voirie', description: 'Rue barrée : les passants évitent le quartier.', districts: ['residentiel', 'commercial', 'centre', 'affaires', 'campus', 'port'], mult: [0.75, 0.86], days: [8, 15] },
-  { title: 'Festival de rue', description: 'Concerts et stands : foule dans le quartier.', districts: ['centre', 'commercial', 'campus', 'port'], mult: [1.3, 1.45], days: [2, 4] },
-  { title: 'Salon professionnel', description: 'Des milliers de visiteurs en déplacement.', districts: ['affaires'], mult: [1.22, 1.35], days: [3, 5] },
-  { title: 'Brocante', description: 'Les chineurs envahissent les trottoirs.', districts: ['residentiel', 'commercial'], mult: [1.15, 1.25], days: [1, 2] },
+  { title: 'Marché de quartier', description: 'Les étals attirent du monde dans les rues.', districts: ['residentiel', 'centre', 'port', 'faubourg', 'vieille'], mult: [1.18, 1.3], days: [1, 2] },
+  { title: 'Travaux de voirie', description: 'Rue barrée : les passants évitent le quartier.', districts: DISTRICT_IDS, mult: [0.75, 0.86], days: [8, 15] },
+  { title: 'Festival de rue', description: 'Concerts et stands : foule dans le quartier.', districts: ['centre', 'commercial', 'campus', 'port', 'vieille', 'theatres', 'plage', 'loisirs'], mult: [1.3, 1.45], days: [2, 4] },
+  { title: 'Salon professionnel', description: 'Des milliers de visiteurs en déplacement.', districts: ['affaires', 'technopole', 'aeroport'], mult: [1.22, 1.35], days: [3, 5] },
+  { title: 'Brocante', description: 'Les chineurs envahissent les trottoirs.', districts: ['residentiel', 'commercial', 'faubourg', 'industrie'], mult: [1.15, 1.25], days: [1, 2] },
 ]
 
 export const RANDOM_EVENTS: { title: string; description: string; sector: string | null; mult: [number, number]; days: [number, number] }[] = [

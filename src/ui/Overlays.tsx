@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { RANKS } from '../game/objectives'
-import { getSector } from '../game/sectors'
+import { getDistrict, getSector } from '../game/sectors'
 import type { Celebration, GameState } from '../game/types'
 import { eur, signed } from './format'
 import { Icon, type IconName } from './icons'
@@ -91,6 +91,14 @@ export function RankUpModal({ c, onClose }: { c: Celebration; onClose: () => voi
             Nouveau secteur disponible : <strong>{getSector(id).name}</strong>
           </p>
         ))}
+        {reward?.unlockDistricts.map((id) => (
+          <p key={id} className="small">
+            <span className="inline-icon accent">
+              <Icon name="map" size={16} />
+            </span>{' '}
+            Nouveau quartier ouvert : <strong>{getDistrict(id).name}</strong>
+          </p>
+        ))}
         {reward?.unlockApps.map((name) => (
           <p key={name} className="small">
             <span className="inline-icon accent">
@@ -142,7 +150,8 @@ export function AnimatedCash({ value }: { value: number }) {
     raf = requestAnimationFrame(step)
     return () => cancelAnimationFrame(raf)
   }, [value])
-  return <>{eur(shown)}</>
+  // Au-delà du million, on abrège pour que la barre du haut tienne sur un téléphone.
+  return <>{Math.abs(shown) >= 1_000_000 ? `${(shown / 1_000_000).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} M€` : eur(shown)}</>
 }
 
 /** Petit « +196 € » qui s'envole sous la trésorerie à chaque nouveau jour. */

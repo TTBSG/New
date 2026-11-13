@@ -1,6 +1,8 @@
 import { businessAttraction } from '../../game/engine'
+import { districtRank } from '../../game/city'
+import { LEADER_BONUS, LEADER_SHARE, LEADER_SHOPS, districtStats } from '../../game/districts'
 import { RIVAL_BRANDS, STYLE_NAMES, getBrand, healthLabel, threatsFor } from '../../game/rivals'
-import { SECTORS } from '../../game/sectors'
+import { SECTORS, getDistrict } from '../../game/sectors'
 import type { GameState } from '../../game/types'
 import { Section, Stat } from '../common'
 import { num } from '../format'
@@ -36,6 +38,8 @@ export function MarketApp({ state }: { state: GameState }) {
   const threats = state.businesses
     .flatMap((b) => threatsFor(state, b, businessAttraction(state, b)).map((t) => ({ b, ...t })))
     .sort((a, b) => b.taken - a.taken)
+  // Quartiers ouverts d'abord, les vôtres en tête.
+  const districts = districtStats(state).sort((a, b) => Number(b.unlocked) - Number(a.unlocked) || b.shops - a.shops || b.share - a.share)
   const contested = new Set(threats.map((t) => t.b.id)).size
 
   return (
@@ -72,6 +76,32 @@ export function MarketApp({ state }: { state: GameState }) {
           )
         })}
         <p className="muted small">Le chiffre après chaque nom est le nombre de boutiques.</p>
+      </Section>
+
+      <Section title="Conquête des quartiers" right={<span className="muted small">{state.leaders.length} / {districts.length} leader</span>}>
+        <p className="muted small">
+          Avec au moins {LEADER_SHOPS} commerces et {Math.round(LEADER_SHARE * 100)} % des clients d'un quartier, vous en devenez le leader : +{Math.round(LEADER_BONUS * 100)} % de passants pour vos commerces du quartier.
+        </p>
+        {districts.map((d) => (
+          <div key={d.id} className="share-row district-row" title={`${getDistrict(d.id).name} : ${num(d.mine)} clients pour vous, ${num(d.theirs)} pour les concurrents`}>
+            <span className={`small ${d.leader ? 'strong' : ''}`}>{getDistrict(d.id).name.replace(/^Quartier (d'|des |)/, '').replace(/^./, (c) => c.toUpperCase())}</span>
+            {d.unlocked ? (
+              <>
+                <span className="share-track">
+                  <span className="share-fill" style={{ width: `${d.shops ? Math.max(1.5, d.share * 100) : 0}%`, background: PLAYER_COLOR }} />
+                </span>
+                <span className="small strong num">{d.leader ? 'Leader' : d.shops ? `${Math.round(d.share * 100)} %` : '—'}</span>
+                <span className="small muted district-note">
+                  {d.shops} à vous · {d.rivals} concurrent{d.rivals > 1 ? 's' : ''}
+                </span>
+              </>
+            ) : (
+              <span className="small muted district-locked">
+                <Icon name="lock" size={12} /> rang {districtRank(d.id)}
+              </span>
+            )}
+          </div>
+        ))}
       </Section>
 
       <Section title="Qui vous prend des clients">

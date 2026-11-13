@@ -588,3 +588,30 @@ input[type='range'] { width: 100%; accent-color: var(--accent); }
 .fit-tag { margin-left: 6px; font-weight: 800; }
 .fit-tag.good { color: var(--good); }
 .fit-tag.bad { color: var(--bad); }
+
+/* ---------- Ville immense : mini-carte et affichage allégé ---------- */
+.far .night-light, .far .lod { display: none; }
+.wheel { animation: wheel-turn 40s linear infinite; }
+@keyframes wheel-turn { to { transform: rotate(360deg); } }
+.minimap-btn { position: absolute; right: 14px; bottom: calc(env(safe-area-inset-bottom) + 136px); z-index: 10; }
+.minimap-btn.active { background: var(--accent); color: #fff; }
+.minimap {
+  position: absolute; right: 14px; left: 14px; bottom: calc(env(safe-area-inset-bottom) + 196px); z-index: 20; max-width: 360px; margin-left: auto;
+  background: var(--surface); border-radius: 20px; padding: 12px; box-shadow: var(--float); display: flex; flex-direction: column; gap: 8px;
+}
+.minimap-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.minimap-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.mini-cell {
+  display: flex; flex-direction: column; gap: 1px; align-items: flex-start; text-align: left; padding: 7px 8px; min-height: 46px;
+  border-radius: 12px; border: 2px solid var(--border); background: var(--surface-2); font: inherit; color: var(--text);
+}
+.mini-cell strong { font-size: 0.74rem; line-height: 1.15; }
+.mini-cell span { font-size: 0.66rem; color: var(--text-2); display: inline-flex; align-items: center; gap: 3px; }
+.mini-cell.mine { border-color: var(--accent); background: var(--accent-soft); }
+.mini-cell.leader { background: var(--accent); border-color: var(--accent); color: #fff; }
+.mini-cell.leader span { color: #fff; }
+.mini-cell.locked { opacity: 0.55; border-style: dashed; }
+@media (prefers-reduced-motion: reduce) { .wheel { animation: none; } }
+.district-row { grid-template-columns: 104px 1fr 52px; row-gap: 0; padding: 5px 0; border-bottom: 1px solid var(--border); }
+.district-note { grid-column: 2 / -1; }
+.district-locked { grid-column: 2 / -1; display: inline-flex; align-items: center; gap: 4px; }

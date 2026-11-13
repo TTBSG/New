@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { isVacant } from './city'
 import { diagnose } from './diagnose'
 import { hire, newGame, openBusiness, setPrice, tick } from './engine'
+import { hireStaff } from './testUtils'
 import type { GameState } from './types'
 
 function cafe(staff: number): GameState {
@@ -25,7 +26,7 @@ describe('diagnostic', () => {
   })
 
   it('conclut positivement quand tout va bien', () => {
-    let s = cafe(2)
+    let s = hireStaff(cafe(2), cafe(2).businesses[0].id, 1)
     for (let i = 0; i < 10; i++) s = tick(s)
     expect(diagnose(s, s.businesses[0]).at(-1)!.tone).not.toBe('bad')
   })

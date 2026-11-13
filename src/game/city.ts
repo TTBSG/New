@@ -1,27 +1,32 @@
 import { RANKS, currentRank } from './objectives'
-import { getDistrict } from './sectors'
+import { districtAt, getDistrict } from './sectors'
 import type { Business, City, GameState, Parcel, ParcelKind } from './types'
 
 export const CITY_WIDTH = 20
-export const CITY_HEIGHT = 13
-/** Rues : colonnes (i) et lignes (j). Les axes 6 et 13 séparent les quartiers. */
+export const CITY_HEIGHT = 34
+/** Rues : colonnes (i) et lignes (j). Les grands axes (6, 13, 20, 27) séparent les quartiers. */
 export const ROADS_I = [2, 6, 10, 13, 17]
-export const ROADS_J = [2, 6, 10]
+export const ROADS_J = [2, 6, 10, 13, 17, 20, 24, 27, 31]
 const MAIN_I = [6, 13]
-const MAIN_J = [6]
+const MAIN_J = [6, 13, 20, 27]
 
 /** Noms des rues : par axe (i = rues qui traversent la carte de haut-droite à bas-gauche, j = l'autre sens). */
 const STREETS_I: Record<number, string> = { 2: 'rue des Lilas', 6: 'avenue de la République', 10: 'rue du Port', 13: "avenue de l'Université", 17: 'rue du Phare' }
-const STREETS_J: Record<number, string> = { 2: 'rue Victor-Hugo', 6: 'boulevard Central', 10: 'rue des Écoles' }
+const STREETS_J: Record<number, string> = {
+  2: 'rue Victor-Hugo',
+  6: 'boulevard Central',
+  10: 'rue des Écoles',
+  13: 'cours de la Liberté',
+  17: 'rue des Tanneurs',
+  20: 'avenue du Général-Leclerc',
+  24: 'rue de la Comédie',
+  27: "boulevard de l'Europe",
+  31: 'rue des Aviateurs',
+}
 
 export const isRoad = (i: number, j: number) => ROADS_I.includes(i) || ROADS_J.includes(j)
 
-export function districtAt(i: number, j: number): string {
-  const top = j < 6
-  if (i < 6) return top ? 'residentiel' : 'commercial'
-  if (i < 13) return top ? 'affaires' : 'centre'
-  return top ? 'campus' : 'port'
-}
+export { districtAt }
 
 /** Rue bordant la parcelle, en privilégiant les grands axes. */
 function frontage(i: number, j: number): { street: string; main: boolean; number: number } | null {
@@ -41,14 +46,25 @@ const HEIGHTS: Record<string, number[]> = {
   affaires: [56, 72, 90, 108],
   campus: [22, 28, 34],
   port: [20, 26, 32],
+  faubourg: [16, 18, 22],
+  vieille: [26, 32, 38],
+  plage: [18, 22, 30],
+  industrie: [20, 26, 30],
+  theatres: [34, 42, 50],
+  chic: [40, 52, 64],
+  aeroport: [18, 22, 26],
+  technopole: [44, 58, 76],
+  loisirs: [16, 20, 24],
 }
+/** Quartiers trop denses ou trop bétonnés pour avoir des squares. */
+const NO_PARKS = ['affaires', 'centre', 'aeroport', 'technopole', 'theatres', 'industrie']
 
 function makeParcel(i: number, j: number, rand: () => number): Parcel {
   const districtId = districtAt(i, j)
   const front = frontage(i, j)
   let kind: ParcelKind
   if (front) kind = rand() < 0.28 ? 'lot' : 'building'
-  else kind = districtId !== 'affaires' && districtId !== 'centre' && rand() < 0.3 ? 'park' : 'building'
+  else kind = !NO_PARKS.includes(districtId) && rand() < 0.3 ? 'park' : 'building'
   const trafficMult = (0.85 + rand() * 0.3) * (front?.main ? 1.2 : 1)
   const heights = HEIGHTS[districtId]
   return {
@@ -133,6 +149,15 @@ export const LANDMARKS: LandmarkDef[] = [
   { id: 'stade', name: 'Stade', districtId: 'commercial', description: 'Les jours de match, tout le quartier est plein.', boost: { restaurant: 0.2, cafe: 0.15, superette: 0.12 } },
   { id: 'bourse', name: 'Tour de la Bourse', districtId: 'affaires', description: 'Cadres et clients d\'affaires au pouvoir d\'achat élevé.', boost: { restaurant: 0.25, cafe: 0.2, vetements: 0.12 } },
   { id: 'universite', name: 'Université', districtId: 'campus', description: 'Le cœur de la vie étudiante.', boost: { cafe: 0.25, electronique: 0.2, boulangerie: 0.15 } },
+  { id: 'piscine', name: 'Piscine', districtId: 'faubourg', description: 'Le rendez-vous des familles du faubourg.', boost: { boulangerie: 0.15, superette: 0.12, cafe: 0.1 } },
+  { id: 'cathedrale', name: 'Cathédrale', districtId: 'vieille', description: 'Le monument que tous les touristes viennent voir.', boost: { restaurant: 0.2, cafe: 0.2, vetements: 0.15 } },
+  { id: 'granderoue', name: 'Grande roue', districtId: 'plage', description: 'Elle tourne tout l\'été sur le front de mer.', boost: { cafe: 0.25, restaurant: 0.2, vetements: 0.1 } },
+  { id: 'usine', name: 'Usine', districtId: 'industrie', description: 'Des centaines d\'ouvriers à nourrir matin et midi.', boost: { boulangerie: 0.25, superette: 0.15, cafe: 0.15 } },
+  { id: 'opera', name: 'Opéra', districtId: 'theatres', description: 'Salle comble tous les soirs.', boost: { restaurant: 0.3, cafe: 0.15, vetements: 0.1 } },
+  { id: 'casino', name: 'Casino', districtId: 'chic', description: 'Une clientèle qui ne regarde pas à la dépense.', boost: { restaurant: 0.25, vetements: 0.25, electronique: 0.1 } },
+  { id: 'terminal', name: 'Terminal', districtId: 'aeroport', description: 'Des voyageurs avec du temps à tuer avant leur vol.', boost: { cafe: 0.25, electronique: 0.2, vetements: 0.15, boulangerie: 0.15 } },
+  { id: 'incubateur', name: 'Incubateur', districtId: 'technopole', description: 'Les start-up carburent au café.', boost: { cafe: 0.25, electronique: 0.25, restaurant: 0.15 } },
+  { id: 'grandhuit', name: 'Grand huit', districtId: 'loisirs', description: 'L\'attraction vedette du parc.', boost: { restaurant: 0.25, cafe: 0.2, vetements: 0.1 } },
   { id: 'phare', name: 'Phare', districtId: 'port', description: 'Le rendez-vous des promeneurs et des touristes.', boost: { restaurant: 0.3, cafe: 0.15, vetements: 0.15 } },
 ]
 

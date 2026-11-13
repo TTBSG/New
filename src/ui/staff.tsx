@@ -1,6 +1,6 @@
 import { fire, hire, inTrial, setSalary, severance } from '../game/engine'
 import { getSector } from '../game/sectors'
-import { CONTRACT_NAMES, PAY_FACTOR, SLOTS, SLOT_HOURS, SLOT_NAMES, autoPlan, payOf, setHours, slotCapacity, toggleShift } from '../game/schedule'
+import { dayProfile, CONTRACT_NAMES, PAY_FACTOR, SLOTS, SLOT_HOURS, SLOT_NAMES, autoPlan, payOf, setHours, slotCapacity, toggleShift } from '../game/schedule'
 import { ABSENCE_NAMES, CHEF, HIRING_CHANNELS, SKILL_LABELS, TRAINING, TRAITS, canTrain, fairSalary, interview, interviewsLeft, level, moraleFactors, moraleTarget, postJob, promote, promotionBlock, train } from '../game/staff'
 import type { Business, Candidate, Employee, GameState, SkillId, Skills, Slot, TraitId } from '../game/types'
 import { Meter, NumberField, Section } from './common'
@@ -250,7 +250,7 @@ export function HiringPanel({ state, b, act }: { state: GameState; b: Business; 
 
 /** Horaires d'ouverture et planning de l'équipe par créneau. */
 export function PlanningPanel({ b, act }: { b: Business; act: Act }) {
-  const share = getSector(b.sectorId).slotShare
+  const share = dayProfile(b)
   const cap = slotCapacity(b)
   const last = b.history.at(-1)
   const openShare = SLOTS.reduce<number>((a, x) => a + (b.hours[x] ? share[x] : 0), 0)

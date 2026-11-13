@@ -8,7 +8,7 @@ export const TW = 64
 export const TH = 32
 /** Grille de la ville (voir game/city.ts) et bande de mer à l'est. */
 const GRID_W = 20
-const GRID_H = 13
+const GRID_H = 34
 export const SEA_WIDTH = 2
 export const OX = (GRID_H * TW) / 2
 export const OY = 140
@@ -43,6 +43,15 @@ export const GROUND: Record<string, string> = {
   centre: '#eed3cc',
   campus: '#d8ead0',
   port: '#e6e2cf',
+  faubourg: '#d3ebc0',
+  vieille: '#e9dcc3',
+  plage: '#f3e6bd',
+  industrie: '#d9d9d4',
+  theatres: '#e6d3de',
+  chic: '#e3e8dc',
+  aeroport: '#dcdfe3',
+  technopole: '#d3e6e6',
+  loisirs: '#dcefc9',
 }
 
 const FACADES: Record<string, string[]> = {
@@ -52,6 +61,15 @@ const FACADES: Record<string, string[]> = {
   centre: ['#efc1b5', '#e6aa9b', '#f3d2c6', '#e8b5a5'],
   campus: ['#e7dcc4', '#d9c9a8', '#efe6d2', '#dccfb4'],
   port: ['#f4f1ea', '#cfe3ec', '#f2dfc9', '#dbe9e4'],
+  faubourg: ['#f6ead2', '#efe0cf', '#f2ecd9', '#ead9c2'],
+  vieille: ['#e8c9a0', '#dfb98a', '#edd5b3', '#d9ac7c'],
+  plage: ['#fdf6e3', '#f9d9c4', '#d7ecf3', '#fbe7b5'],
+  industrie: ['#b9bcc2', '#a8acb4', '#c7c9cd', '#b0a79d'],
+  theatres: ['#d9a7b8', '#c98ea5', '#e4bcc9', '#b98aa8'],
+  chic: ['#f3efe4', '#e8e2d2', '#f7f4ec', '#e3dccb'],
+  aeroport: ['#cfd6de', '#bcc6d1', '#dbe1e7', '#c5cdd6'],
+  technopole: ['#8fd0c8', '#7bc0cf', '#a6dcd3', '#86c9b9'],
+  loisirs: ['#f7c8d6', '#c9e3f5', '#fbe3a8', '#cdeccb'],
 }
 const ROOFS = ['#c8664a', '#b5523c', '#d9814f', '#c25b45']
 
@@ -245,21 +263,21 @@ export const ParcelObject = memo(function ParcelObject({
   }
 
   const facade = FACADES[districtId][variant % 4]
-  if (districtId === 'residentiel')
+  if (districtId === 'residentiel' || districtId === 'faubourg' || districtId === 'vieille' || districtId === 'plage')
     return (
       <g data-parcel={parcel.id} className={locked ? 'locked-parcel' : undefined}>
         <Box i={i} j={j} h={height} color={facade} inset={0.2} roof={ROOFS[variant % 4]} floors={2} />
         <Lights i={i} j={j} inset={0.2} h={height} rows={2} seed={i * 13 + j * 7 + variant} />
       </g>
     )
-  if (districtId === 'affaires')
+  if (districtId === 'affaires' || districtId === 'technopole')
     return (
       <g data-parcel={parcel.id} className={locked ? 'locked-parcel' : undefined}>
         <Box i={i} j={j} h={height} color={facade} inset={0.16} floors={Math.round(height / 11)} />
         <Lights i={i} j={j} inset={0.16} h={height} rows={Math.round(height / 11)} seed={i * 13 + j * 7 + variant} />
       </g>
     )
-  if (districtId === 'commercial')
+  if (districtId === 'commercial' || districtId === 'industrie' || districtId === 'aeroport' || districtId === 'loisirs')
     return (
       <g data-parcel={parcel.id} className={locked ? 'locked-parcel' : undefined}>
         <Box i={i} j={j} h={height} color={facade} inset={0.1} roof="#d7c3a3" floors={2} />
@@ -342,6 +360,145 @@ function Landmark({ parcel, locked }: { parcel: Parcel; locked?: boolean }) {
       )
       break
     }
+    case 'piscine':
+      body = (
+        <>
+          <polygon points={diamond(i, j, 0.06)} fill="#e9e4d6" stroke="#cfc8b5" strokeWidth={1} />
+          <polygon points={diamond(i, j, 0.2)} fill="#5cc3e8" stroke="#fff" strokeWidth={1.5} />
+          <path d={`M${cx - 12},${cy} h24 M${cx - 9},${cy - 4} h18 M${cx - 9},${cy + 4} h18`} stroke="#fff" strokeOpacity={0.7} strokeWidth={0.8} />
+          <Box i={i} j={j} h={12} color="#f4f1ea" inset={0.4} roof="#3987e5" />
+        </>
+      )
+      break
+    case 'cathedrale': {
+      const spire = (a: number, b: number) => {
+        const [x, y] = P(i + a, j + b, 62)
+        return <path d={`M${x - 6},${y} L${x},${y - 26} L${x + 6},${y}Z`} fill="#6f7f94" stroke="#55627a" strokeWidth={0.8} />
+      }
+      const [rx, ry] = P(i + 0.5, j + 0.82, 22)
+      body = (
+        <>
+          <Box i={i} j={j} h={34} color="#d8cdb8" inset={0.1} roof="#8f9bb0" />
+          <Box i={i + 0.08} j={j + 0.42} h={62} color="#cfc3ab" inset={0.3} roof="#6f7f94" />
+          <Box i={i + 0.42} j={j + 0.08} h={62} color="#cfc3ab" inset={0.3} roof="#6f7f94" />
+          {spire(0.58, 0.92)}
+          {spire(0.92, 0.58)}
+          <circle cx={rx} cy={ry} r={5} fill="#7fb7d9" stroke="#fff" strokeWidth={1.2} className="shop-window" />
+        </>
+      )
+      break
+    }
+    case 'granderoue': {
+      const wy = cy - 44
+      body = (
+        <>
+          <path d={`M${cx - 16},${cy + 2} L${cx},${wy} L${cx + 16},${cy + 2}`} stroke="#5a5f6e" strokeWidth={2.4} fill="none" />
+          <g className="wheel" style={{ transformOrigin: `${cx}px ${wy}px` }}>
+            <circle cx={cx} cy={wy} r={30} fill="none" stroke="#e85d8a" strokeWidth={2.4} />
+            {[0, 1, 2, 3, 4, 5, 6, 7].map((k) => {
+              const a = (k * Math.PI) / 4
+              const x = cx + Math.cos(a) * 30
+              const y = wy + Math.sin(a) * 30
+              return (
+                <g key={k}>
+                  <line x1={cx} y1={wy} x2={x} y2={y} stroke="#b9bcc6" strokeWidth={0.9} />
+                  <rect x={x - 3.5} y={y - 2.5} width={7} height={6} rx={1.5} fill={['#f2b134', '#5c8de8', '#4cb86b', '#e8743b'][k % 4]} />
+                </g>
+              )
+            })}
+          </g>
+          <circle cx={cx} cy={wy} r={3} fill="#3b2f2a" />
+        </>
+      )
+      break
+    }
+    case 'usine': {
+      const stack = (a: number, b: number, h: number) => {
+        const [x, y] = P(i + a, j + b)
+        return (
+          <g>
+            <rect x={x - 3.5} y={y - h} width={7} height={h} fill="#b5523c" stroke="#8f3d2c" strokeWidth={0.6} />
+            <rect x={x - 3.5} y={y - h} width={7} height={4} fill="#f4f4f4" />
+            <circle cx={x + 3} cy={y - h - 6} r={5} fill="#e3e3e3" opacity={0.85} />
+            <circle cx={x + 9} cy={y - h - 13} r={7} fill="#ececec" opacity={0.7} />
+          </g>
+        )
+      }
+      body = (
+        <>
+          <Box i={i} j={j} h={24} color="#a8acb4" inset={0.06} roof="#7d8391" />
+          <polygon points={pts([frontPoint(i, j, 0.06, 0.1, 0), frontPoint(i, j, 0.06, 0.4, 0), frontPoint(i, j, 0.06, 0.4, 14), frontPoint(i, j, 0.06, 0.1, 14)])} fill="#5a5f6e" />
+          <polygon points={pts([frontPoint(i, j, 0.06, 0.52, 9), frontPoint(i, j, 0.06, 0.9, 9), frontPoint(i, j, 0.06, 0.9, 17), frontPoint(i, j, 0.06, 0.52, 17)])} fill="#cfe6f2" className="shop-window" />
+          {stack(0.3, 0.3, 58)}
+          {stack(0.55, 0.25, 46)}
+        </>
+      )
+      break
+    }
+    case 'opera': {
+      const [x, y] = P(i + 0.5, j + 0.5, 34)
+      body = (
+        <>
+          <Box i={i} j={j} h={34} color="#f1e3d6" inset={0.06} roof="#a0405c" />
+          {[0.1, 0.26, 0.42, 0.58, 0.74].map((t) => (
+            <polygon key={t} points={pts([frontPoint(i, j, 0.06, t, 0), frontPoint(i, j, 0.06, t + 0.08, 0), frontPoint(i, j, 0.06, t + 0.08, 24), frontPoint(i, j, 0.06, t, 24)])} fill="#fff" stroke="#d9c7b5" strokeWidth={0.5} />
+          ))}
+          <path d={`M${x - 15},${y} a15,13 0 0 1 30,0z`} fill="#c9a23a" stroke="#a07f25" strokeWidth={1} />
+          <circle cx={x} cy={y - 15} r={2.2} fill="#c9a23a" />
+        </>
+      )
+      break
+    }
+    case 'casino': {
+      const [x, y] = P(i + 0.5, j + 0.5, 44)
+      body = (
+        <>
+          <Box i={i} j={j} h={44} color="#f6efdc" inset={0.08} roof="#c9a23a" floors={3} />
+          <polygon points={pts([frontPoint(i, j, 0.08, 0.36, 0), frontPoint(i, j, 0.08, 0.64, 0), frontPoint(i, j, 0.08, 0.64, 16), frontPoint(i, j, 0.08, 0.36, 16)])} fill="#a0405c" />
+          <polygon points={pts([frontPoint(i, j, 0.08, 0.1, 22), frontPoint(i, j, 0.08, 0.9, 22), frontPoint(i, j, 0.08, 0.9, 30), frontPoint(i, j, 0.08, 0.1, 30)])} fill="#c9a23a" className="shop-window" />
+          <path d={`M${x},${y - 16} l3.5,7 7.5,1 -5.5,5.5 1.5,7.5 -7,-3.7 -7,3.7 1.5,-7.5 -5.5,-5.5 7.5,-1z`} fill="#f2b134" stroke="#a07f25" strokeWidth={0.8} />
+        </>
+      )
+      break
+    }
+    case 'terminal': {
+      const [tx, ty] = P(i + 0.25, j + 0.25, 60)
+      const [px, py] = P(i + 0.62, j + 0.62, 16)
+      body = (
+        <>
+          <Box i={i} j={j} h={14} color="#e3e8ee" inset={0.04} roof="#aeb8c4" />
+          <polygon points={pts([frontPoint(i, j, 0.04, 0.06, 3), frontPoint(i, j, 0.04, 0.94, 3), frontPoint(i, j, 0.04, 0.94, 11), frontPoint(i, j, 0.04, 0.06, 11)])} fill="#a9dcf5" className="shop-window" />
+          <Box i={i - 0.25} j={j - 0.25} h={56} color="#cfd6de" inset={0.42} roof="#8794a3" />
+          <ellipse cx={tx} cy={ty + 2} rx={9} ry={4.5} fill="#5c8de8" stroke="#fff" strokeWidth={1} className="shop-window" />
+          <path d={`M${px - 15},${py + 2} L${px + 13},${py - 5} l4,-1 -1,3 -9,5 -5,9 -3,0 2,-8 -8,2 -3,4 -2,0 1,-6 -3,-3z`} fill="#fff" stroke="#8794a3" strokeWidth={0.9} />
+        </>
+      )
+      break
+    }
+    case 'incubateur': {
+      const [x, y] = P(i + 0.5, j + 0.5, 70)
+      body = (
+        <>
+          <Box i={i} j={j} h={70} color="#7fd0c0" inset={0.14} roof="#2fa58f" floors={7} />
+          <Lights i={i} j={j} inset={0.14} h={70} rows={7} seed={11} />
+          <path d={`M${x},${y - 3} l10,-6 0,-9 -10,6z M${x},${y - 3} l-10,-6 0,-9 10,6z`} fill="#b7f0e2" stroke="#2fa58f" strokeWidth={0.8} />
+        </>
+      )
+      break
+    }
+    case 'grandhuit':
+      body = (
+        <>
+          <polygon points={diamond(i, j, 0.05)} fill="#cdeccb" stroke="#a9d3a6" strokeWidth={1} />
+          <path d={`M${cx - 28},${cy + 2} C${cx - 22},${cy - 60} ${cx - 6},${cy - 60} ${cx - 2},${cy - 14} S${cx + 16},${cy - 46} ${cx + 28},${cy + 2}`} stroke="#e8472b" strokeWidth={3} fill="none" strokeLinecap="round" />
+          {[-24, -15, -6, 6, 16, 24].map((dx) => (
+            <line key={dx} x1={cx + dx} y1={cy + 4} x2={cx + dx} y2={cy - (dx < 0 ? 34 - Math.abs(dx + 14) * 2.2 : 24 - Math.abs(dx - 16) * 1.6)} stroke="#8a6142" strokeWidth={1.1} />
+          ))}
+          <path d={`M${cx + 6},${cy + 4} L${cx + 14},${cy - 20} L${cx + 22},${cy + 4}Z`} fill="#f2b134" stroke="#fff" strokeWidth={1} />
+          <rect x={cx - 14} y={cy - 46} width={8} height={5} rx={1.5} fill="#3987e5" />
+        </>
+      )
+      break
     default: {
       // Phare : tour blanche à bandes rouges, lanterne allumée le soir.
       const top = cy - 74

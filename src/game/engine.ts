@@ -5,7 +5,8 @@ import { autoReplace } from './replace'
 import { benefitsPerEmployee, makeCandidate } from './staff'
 import { employeeFromCandidate, employeesDay, fairSalary, migrateEmployee, refreshCandidates as refreshStaffCandidates, salesFactor, serviceQuality, TRIAL_DAYS } from './staff'
 import { STARTING_SECTORS, checkObjectives, currentRank, isSectorUnlocked, sectorUnlockRank, setNetWorth } from './objectives'
-import { buildCity, districtUnlocked, generateCity, getParcel, isFree, locationFit, parcelRent, parcelTraffic } from './city'
+import { buildCity, districtUnlocked, generateCity, getParcel, isFree, locationFit, locationPerks, parcelRent, parcelTraffic } from './city'
+import { LEADER_BONUS, districtStats } from './districts'
 import { canDelegate, loanRateCut, marketingBoost, maxBusinesses, payHq, refreshOfficeCandidates, startingReputation } from './hq'
 import { LOCAL_EVENTS, RANDOM_EVENTS, SECTORS, getDistrict, getSector } from './sectors'
 import { WEATHER_NAMES, nextWeather, weatherMult } from './weather'
@@ -18,7 +19,7 @@ import { clamp, log, newId, pick, rand, randRange, round2, update } from './util
 export { rand }
 export { fairSalary, unitCost }
 
-export const SAVE_VERSION = 13
+export const SAVE_VERSION = 14
 export const START_CASH = 60000
 const HISTORY_DAYS = 120
 const BANKRUPTCY_DAYS = 30
@@ -139,6 +140,7 @@ export function newGame(seed = Date.now() % 2147483647): GameState {
     objectivesDone: [],
     unlockedSectors: [...STARTING_SECTORS],
     celebrations: [],
+    leaders: [],
     nextId: 1,
   }
   s.city = generateCity(() => rand(s))
@@ -163,12 +165,43 @@ export function eventsFor(s: GameState, b: Business) {
   return s.events.filter((e) => (e.sectorId === null || e.sectorId === b.sectorId) && (!e.districtId || e.districtId === districtId))
 }
 
+const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
+
+/** Ce qui fait varier la fréquentation d'un commerce aujourd'hui, ligne par ligne (0,12 = +12 % de passants). */
+export function trafficFactors(s: GameState, b: Business): { label: string; effect: number }[] {
+  const parcel = getParcel(s.city, b.parcelId)
+  const district = getDistrict(parcel.districtId)
+  const out = locationPerks(s.city, parcel, b.sectorId)
+  const month = dateOf(s.day).getUTCMonth()
+  const season = district.season?.[month] ?? 1
+  if (season !== 1) out.push({ label: `Saison (${MONTHS[month]}, ${district.name.toLowerCase()})`, effect: season - 1 })
+  if (weekday(s.day) >= 5 && district.weekend && district.weekend !== 1) out.push({ label: `Week-end (${district.name.toLowerCase()})`, effect: district.weekend - 1 })
+  if (s.leaders.includes(district.id)) out.push({ label: 'Leader du quartier', effect: LEADER_BONUS })
+  const weather = weatherMult(s.weather, b.sectorId)
+  if (weather !== 1) out.push({ label: `Météo : ${WEATHER_NAMES[s.weather].toLowerCase()}`, effect: weather - 1 })
+  for (const e of eventsFor(s, b)) out.push({ label: e.title, effect: e.demandMult - 1 })
+  return out
+}
+
+/** Leaders de quartier : recalculés chaque soir, avec annonce des conquêtes et des pertes. */
+function updateLeaders(s: GameState) {
+  const now = districtStats(s).filter((d) => d.leader).map((d) => d.id)
+  for (const id of now)
+    if (!s.leaders.includes(id)) {
+      log(s, `Vous devenez leader du quartier ${getDistrict(id).name} : +${Math.round(LEADER_BONUS * 100)} % de passants pour vos commerces du quartier.`, 'good')
+      s.celebrations.push({ id: `leader${id}${s.day}`, title: `Leader : ${getDistrict(id).name}`, prime: 0, rankUp: null, label: 'Conquête' })
+    }
+  for (const id of s.leaders) if (!now.includes(id)) log(s, `Vous n'êtes plus leader du quartier ${getDistrict(id).name}.`, 'bad')
+  s.leaders = now
+}
+
 function simulateBusiness(s: GameState, b: Business): DayReport {
   const sector = getSector(b.sectorId)
   const parcel = getParcel(s.city, b.parcelId)
   const purchases = receiveDeliveries(s, b)
 
-  const eventMult = eventsFor(s, b).reduce((m, e) => m * e.demandMult, 1) * weatherMult(s.weather, b.sectorId)
+  // Tout ce qui tient au lieu et au moment : quartier, lieux voisins, saison, week-end, météo, événements.
+  const eventMult = trafficFactors(s, b).reduce((m, f) => m * (1 + f.effect), 1)
   const marketingFactor = 1 + 0.5 * Math.log10(1 + b.marketingDaily / 10)
   const reputationFactor = 0.6 + b.reputation / 125
   // Les concurrents du même secteur installés à proximité détournent une partie des passants.
@@ -176,8 +209,6 @@ function simulateBusiness(s: GameState, b: Business): DayReport {
   const visitors = Math.round(
     competition *
       parcelTraffic(parcel) *
-      // Clientèle du quartier et lieux remarquables voisins (gare, lycée…).
-      locationFit(s.city, parcel, b.sectorId) *
       sector.trafficMult *
       WEEKDAY_TRAFFIC[weekday(s.day)] *
       s.economy *
@@ -390,6 +421,7 @@ export function tick(state: GameState): GameState {
     for (const b of s.businesses) simulateBusiness(s, b)
     for (const w of s.warehouses) warehouseDay(s, w)
     rivalsMove(s)
+    updateLeaders(s)
 
     payHq(s)
     delegatePurchasing(s)
@@ -729,6 +761,17 @@ export function migrate(raw: GameState): GameState | null {
       'Chaque quartier a désormais sa clientèle, et des lieux comme la gare, le lycée ou le stade attirent du monde autour d\'eux. Touchez un local à louer : la fiche indique les atouts de l\'emplacement pour chaque type de commerce.',
     ])
     s.version = 13
+  }
+  if (s.version === 13) {
+    // La ville devient immense : neuf nouveaux quartiers au sud, chacun avec son lieu remarquable.
+    const taken = [...s.businesses.map((b) => b.parcelId), ...s.rivals.map((r) => r.parcelId), ...s.warehouses.map((w) => w.parcelId), ...(s.hq ? [s.hq.parcelId] : [])]
+    s.city = buildCity(() => rand(s), s.city.parcels, taken)
+    s.leaders = []
+    advisorMessage(s, [
+      'La ville est devenue immense : quinze quartiers s\'étendent maintenant le long de la côte, du Faubourg à l\'Aéroport. Ils se débloquent avec les rangs, et deux nouveaux rangs vous attendent.',
+      'Chaque quartier a son rythme : les théâtres vivent le soir, la plage en été, le parc de loisirs le week-end. Avec au moins deux commerces et la moitié des clients d\'un quartier, vous en devenez le leader (+6 % de passants). La mini-carte, en bas à droite, vous emmène partout.',
+    ])
+    s.version = 14
   }
   return s.version === SAVE_VERSION ? s : null
 }

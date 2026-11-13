@@ -1,4 +1,4 @@
-import { getDistrict, getSector } from './sectors'
+import { districtOfParcel, getDistrict, getSector } from './sectors'
 import type { GameState } from './types'
 import { log } from './util'
 
@@ -31,6 +31,7 @@ const serviceStaff = (s: GameState) =>
 const staff = (s: GameState) => s.businesses.reduce((n, b) => n + b.employees.length, 0)
 const bestReputation = (s: GameState) => Math.max(0, ...s.businesses.map((b) => Math.round(b.reputation)))
 export const groupProfit30 = (s: GameState) => s.businesses.reduce((sum, b) => sum + b.history.slice(-30).reduce((a, r) => a + r.profit, 0), 0)
+const districtsOwned = (s: GameState) => new Set(s.businesses.map((b) => districtOfParcel(b.parcelId).id)).size
 const sectorsOwned = (s: GameState) => new Set(s.businesses.map((b) => b.sectorId)).size
 
 /** La valeur nette est fournie par le moteur pour éviter une dépendance circulaire. */
@@ -40,11 +41,13 @@ export function setNetWorth(fn: (s: GameState) => number) {
 }
 
 export const RANKS: RankDef[] = [
-  { rank: 1, title: 'Premiers pas', unlockSectors: ['restaurant', 'vetements'], unlockApps: ['Fournisseurs'], unlockDistricts: [], prime: 3000 },
-  { rank: 2, title: 'Boutique de quartier', unlockSectors: ['electronique'], unlockApps: ['Siège'], unlockDistricts: ['campus'], prime: 8000 },
-  { rank: 3, title: 'Petite enseigne', unlockSectors: [], unlockApps: ['Logistique'], unlockDistricts: ['port'], prime: 15000 },
-  { rank: 4, title: 'Réseau local', unlockSectors: [], unlockApps: [], unlockDistricts: [], prime: 30000 },
-  { rank: 5, title: 'Empire', unlockSectors: [], unlockApps: [], unlockDistricts: [], prime: 0 },
+  { rank: 1, title: 'Premiers pas', unlockSectors: ['restaurant', 'vetements'], unlockApps: ['Fournisseurs'], unlockDistricts: ['faubourg'], prime: 3000 },
+  { rank: 2, title: 'Boutique de quartier', unlockSectors: ['electronique'], unlockApps: ['Siège'], unlockDistricts: ['campus', 'vieille'], prime: 8000 },
+  { rank: 3, title: 'Petite enseigne', unlockSectors: [], unlockApps: ['Logistique'], unlockDistricts: ['port', 'industrie'], prime: 15000 },
+  { rank: 4, title: 'Réseau local', unlockSectors: [], unlockApps: [], unlockDistricts: ['plage', 'theatres'], prime: 30000 },
+  { rank: 5, title: 'Empire', unlockSectors: [], unlockApps: [], unlockDistricts: ['chic', 'technopole'], prime: 60000 },
+  { rank: 6, title: 'Magnat', unlockSectors: [], unlockApps: [], unlockDistricts: ['aeroport', 'loisirs'], prime: 120000 },
+  { rank: 7, title: 'Maître de la ville', unlockSectors: [], unlockApps: [], unlockDistricts: [], prime: 0 },
 ]
 
 export const OBJECTIVES: ObjectiveDef[] = [
@@ -67,6 +70,14 @@ export const OBJECTIVES: ObjectiveDef[] = [
   { id: 'all_sectors', rank: 5, title: 'Être présent dans les 6 secteurs', progress: (s) => [sectorsOwned(s), 6], prime: 20000 },
   { id: 'ten_shops', rank: 5, title: 'Posséder 10 commerces', progress: (s) => [s.businesses.length, 10], prime: 25000 },
   { id: 'millionaire', rank: 5, title: 'Devenir millionnaire (valeur nette)', progress: (s) => [Math.max(0, Math.round(netWorthOf(s))), 1000000], prime: 50000 },
+
+  { id: 'districts_6', rank: 6, title: 'Être présent dans 6 quartiers', progress: (s) => [districtsOwned(s), 6], prime: 30000 },
+  { id: 'leader_3', rank: 6, title: 'Être leader de 3 quartiers', progress: (s) => [s.leaders.length, 3], prime: 40000 },
+  { id: 'month_100k', rank: 6, title: 'Faire 100 000 € de bénéfice sur 30 jours', progress: (s) => [Math.max(0, Math.round(groupProfit30(s))), 100000], prime: 50000 },
+
+  { id: 'shops_20', rank: 7, title: 'Posséder 20 commerces', progress: (s) => [s.businesses.length, 20], prime: 60000 },
+  { id: 'leader_8', rank: 7, title: 'Être leader de 8 quartiers', progress: (s) => [s.leaders.length, 8], prime: 80000 },
+  { id: 'networth_5m', rank: 7, title: 'Atteindre 5 millions de valeur nette', progress: (s) => [Math.max(0, Math.round(netWorthOf(s))), 5000000], prime: 100000 },
 ]
 
 /** Rang actuel : le premier dont tous les objectifs ne sont pas encore atteints (6 = tout est fini). */
@@ -125,7 +136,7 @@ export function checkObjectives(s: GameState): string[][] {
         [
           r.prime ? `Une prime de ${eur(r.prime)} vous est versée.` : '',
           unlocked.length ? `Vous pouvez désormais ouvrir : ${unlocked.join(', ')}.` : '',
-          r.unlockDistricts.length ? `Un nouveau quartier s'ouvre à vous sur la carte : ${r.unlockDistricts.map((id) => getDistrict(id).name).join(', ')} ! ${getDistrict(r.unlockDistricts[0]).description}` : '',
+          r.unlockDistricts.length ? `${r.unlockDistricts.length > 1 ? 'De nouveaux quartiers s\'ouvrent' : 'Un nouveau quartier s\'ouvre'} à vous sur la carte : ${r.unlockDistricts.map((id) => getDistrict(id).name).join(' et ')}. Touchez un local pour découvrir leur clientèle.` : '',
           r.unlockApps.includes('Fournisseurs') ? 'Nouvelle appli sur votre téléphone : Fournisseurs. Choisissez vos fournisseurs, comparez qualité, prix et délais, et passez vos propres commandes.' : '',
           r.unlockApps.includes('Logistique') ? 'Nouvelle appli : Logistique. Avec un directeur logistique au siège, ouvrez des entrepôts dans la zone commerciale pour acheter en gros et livrer vos boutiques chaque nuit.' : '',
           r.unlockApps.includes('Siège') ? 'Vous pouvez désormais installer votre siège social sur un local libre : il permet de dépasser 3 commerces et d\'embaucher des employés de bureau. Tout se gère dans la nouvelle appli Siège.' : '',

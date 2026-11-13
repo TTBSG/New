@@ -7,12 +7,13 @@ const RANK3 = ['open_first', 'hire_first', 'first_sales', 'rep_60', 'two_shops',
 const RANK4 = [...RANK3, 'staff_8', 'three_shops', 'networth_200k']
 
 describe('ville agrandie', () => {
-  it('la grille couvre six quartiers, chacun avec son lieu remarquable', () => {
+  it('la grille couvre quinze quartiers, chacun avec son lieu remarquable', () => {
     const s = newGame(2)
     expect(s.city.width).toBe(CITY_WIDTH)
     expect(s.city.height).toBe(CITY_HEIGHT)
     const districts = new Set(s.city.parcels.map((p) => p.districtId))
-    expect([...districts].sort()).toEqual(['affaires', 'campus', 'centre', 'commercial', 'port', 'residentiel'])
+    expect(districts.size).toBe(15)
+    expect(LANDMARKS).toHaveLength(15)
     for (const lm of LANDMARKS) {
       const spot = s.city.parcels.filter((p) => p.landmarkId === lm.id)
       expect(spot).toHaveLength(1)

@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { districtRank, districtUnlocked, getLandmark, getParcel, isFree, locationFit, locationPerks, parcelRent, parcelTraffic } from '../game/city'
 import { HQ_LEVELS, HQ_RANK, hqLevel, hqOpeningCost, hqUnlocked, maxBusinesses, openHq } from '../game/hq'
-import { WAREHOUSE_DISTRICT, canOpenWarehouseHere, openWarehouse, servedShops, warehouseLevel, warehouseOf, warehouseOpeningCost, warehouseStock } from '../game/warehouse'
+import { WAREHOUSE_DISTRICTS, canOpenWarehouseHere, openWarehouse, servedShops, warehouseLevel, warehouseOf, warehouseOpeningCost, warehouseStock } from '../game/warehouse'
 import { businessAttraction, buyRival, buyRivalBlock, openBusiness, openingCost, serviceCapacity } from '../game/engine'
 import { STYLE_NAMES, getBrand, healthLabel, pressureAt, rivalPrice, threatsFor, victimsOf } from '../game/rivals'
 import { SLOT_NAMES } from '../game/schedule'
 import { WEATHER_NAMES } from '../game/weather'
 import { businessAlerts } from './phone/apps'
 import { isSectorUnlocked, sectorUnlockRank } from '../game/objectives'
-import { DISTRICTS, SECTORS, getDistrict, getSector } from '../game/sectors'
+import { districtStats } from '../game/districts'
+import { DISTRICTS, DISTRICT_COLS, DISTRICT_ROWS, DISTRICT_SPAN, SECTORS, getDistrict, getSector } from '../game/sectors'
 import type { GameState } from '../game/types'
 import { CityMap, type LocalEventMark, type Overlay, type Phase, type RivalMark, type ShopStatus, type WarehouseMark } from './city/CityMap'
 import { eur, num, signed } from './format'
@@ -65,6 +66,8 @@ export function CityView({
   const [overlay, setOverlay] = useState<Overlay>('none')
   const [picking, setPicking] = useState(false)
   const [pickingWarehouse, setPickingWarehouse] = useState(false)
+  const [miniMap, setMiniMap] = useState(false)
+  const [focus, setFocus] = useState<{ i: number; j: number; nonce: number } | null>(null)
 
   useEffect(() => onSheetChange(selectedId !== null), [selectedId, onSheetChange])
 
@@ -158,6 +161,8 @@ export function CityView({
         localEvents={localEvents}
         pressure={pressure}
         locked={locked}
+        leaders={state.leaders.join(',')}
+        focus={focus}
         selectedId={selectedId}
         overlay={overlay}
         onSelect={(id) => {
@@ -187,6 +192,21 @@ export function CityView({
         </div>
       )}
 
+
+      {!parcel && (
+        <button className={`round-btn minimap-btn ${miniMap ? 'active' : ''}`} onClick={() => setMiniMap((v) => !v)} aria-label="Plan de la ville" aria-expanded={miniMap}>
+          <Icon name="map" />
+        </button>
+      )}
+      {!parcel && miniMap && (
+        <MiniMap
+          state={state}
+          onGo={(i, j) => {
+            setFocus({ i, j, nonce: Date.now() })
+            setMiniMap(false)
+          }}
+        />
+      )}
 
       {parcel && (
         <div className="sheet docked">
@@ -324,8 +344,8 @@ export function CityView({
                   <Icon name="truck" size={18} /> Installer un entrepôt ici
                 </button>
               )}
-              {parcel.districtId === WAREHOUSE_DISTRICT && !canOpenWarehouseHere(state, parcel.id) && state.hq && (
-                <p className="small muted">Les entrepôts s'installent ici, dans la zone commerciale, dès le rang 4 avec un directeur logistique au siège.</p>
+              {WAREHOUSE_DISTRICTS.includes(parcel.districtId) && !canOpenWarehouseHere(state, parcel.id) && state.hq && (
+                <p className="small muted">Les entrepôts s'installent dans ce quartier, dès le rang 4 avec un directeur logistique au siège.</p>
               )}
             </>
           )}
@@ -462,6 +482,11 @@ export function CityView({
                 </div>
               </div>
               <p className="small">{getDistrict(parcel.districtId).description}</p>
+              {districtRhythm(parcel.districtId).map((line) => (
+                <p key={line} className="small strong">
+                  {line}.
+                </p>
+              ))}
               <p className="muted small">Remplissez vos objectifs (appli Objectifs) pour pouvoir vous y installer.</p>
             </>
           )}
@@ -488,6 +513,68 @@ export function CityView({
   )
 }
 
+/** Plan schématique des quinze quartiers : où vous êtes, où sont les concurrents, et un raccourci pour s'y rendre. */
+function MiniMap({ state, onGo }: { state: GameState; onGo: (i: number, j: number) => void }) {
+  const stats = districtStats(state)
+  const cells = []
+  for (let row = 0; row < DISTRICT_ROWS; row++)
+    for (let col = 0; col < DISTRICT_COLS; col++) {
+      const d = DISTRICTS.find((x) => x.cell[0] === col && x.cell[1] === row)!
+      const st = stats.find((x) => x.id === d.id)!
+      cells.push(
+        <button
+          key={d.id}
+          className={`mini-cell ${st.unlocked ? '' : 'locked'} ${st.leader ? 'leader' : ''} ${st.shops ? 'mine' : ''}`}
+          onClick={() => onGo(col * DISTRICT_SPAN + 3.5, row * DISTRICT_SPAN + 3.5)}
+        >
+          <strong>{d.name.replace(/^Quartier (d'|des |)/, '').replace(/^./, (c) => c.toUpperCase())}</strong>
+          {!st.unlocked ? (
+            <span>
+              <Icon name="lock" size={10} /> rang {districtRank(d.id)}
+            </span>
+          ) : st.leader ? (
+            <span>Leader · {st.shops} commerces</span>
+          ) : (
+            <span>
+              {st.shops ? `${st.shops} à vous` : 'libre'}
+              {st.rivals ? ` · ${st.rivals} ${st.rivals > 1 ? 'rivaux' : 'rival'}` : ''}
+            </span>
+          )}
+        </button>,
+      )
+    }
+  return (
+    <div className="minimap" role="dialog" aria-label="Plan de la ville">
+      <div className="minimap-head">
+        <strong>Plan de la ville</strong>
+        <span className="small muted">nord en haut · mer à droite</span>
+      </div>
+      <div className="minimap-grid">{cells}</div>
+      <span className="small muted">Touchez un quartier pour vous y rendre.</span>
+    </div>
+  )
+}
+
+const RHYTHM = ['le matin', 'à midi', 'le soir']
+
+/** Ce qui rythme un quartier : heures de pointe, saison, week-end. */
+function districtRhythm(districtId: string): string[] {
+  const d = getDistrict(districtId)
+  const out: string[] = []
+  if (d.slots) {
+    const best = d.slots.indexOf(Math.max(...d.slots))
+    const worst = d.slots.indexOf(Math.min(...d.slots))
+    out.push(`Animé surtout ${RHYTHM[best]}, calme ${RHYTHM[worst]}`)
+  }
+  if (d.season) {
+    const hi = Math.max(...d.season)
+    const lo = Math.min(...d.season)
+    out.push(`Saisonnier : de ${pctSigned(lo - 1)} en basse saison à ${pctSigned(hi - 1)} en haute saison`)
+  }
+  if (d.weekend && d.weekend !== 1) out.push(`Week-end : ${pctSigned(d.weekend - 1)} de passants`)
+  return out
+}
+
 /** Atouts de l'emplacement : pour chaque secteur, l'effet du quartier et des lieux voisins sur la fréquentation. */
 function LocationPerks({ state, parcelId }: { state: GameState; parcelId: string }) {
   const parcel = getParcel(state.city, parcelId)
@@ -501,6 +588,11 @@ function LocationPerks({ state, parcelId }: { state: GameState; parcelId: string
         {getDistrict(parcel.districtId).description}
         {nearby.length > 0 && ` À proximité : ${nearby.join(', ')}.`}
       </span>
+      {districtRhythm(parcel.districtId).map((line) => (
+        <span key={line} className="small strong">
+          {line}.
+        </span>
+      ))}
       {rows.length > 0 && (
         <div className="perk-list">
           {rows.map(({ sec, fit }) => (

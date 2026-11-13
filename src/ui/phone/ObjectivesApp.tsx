@@ -1,5 +1,5 @@
 import { RANKS, activeObjectives, currentRank, rankTitle } from '../../game/objectives'
-import { getSector } from '../../game/sectors'
+import { getDistrict, getSector } from '../../game/sectors'
 import type { GameState } from '../../game/types'
 import { Meter, Section } from '../common'
 import { eur, num } from '../format'
@@ -51,7 +51,7 @@ export function ObjectivesApp({ state }: { state: GameState }) {
               </div>
             ))}
           </Section>
-          {reward && (reward.prime > 0 || reward.unlockSectors.length > 0 || reward.unlockApps.length > 0) && (
+          {reward && (reward.prime > 0 || reward.unlockSectors.length > 0 || reward.unlockApps.length > 0 || reward.unlockDistricts.length > 0) && (
             <Section title={`Récompense du rang « ${rankTitle(rank + 1)} »`}>
               {reward.prime > 0 && <p className="small">Prime de {eur(reward.prime)}</p>}
               {reward.unlockApps.map((name) => (
@@ -68,6 +68,14 @@ export function ObjectivesApp({ state }: { state: GameState }) {
                     <Icon name={id as IconName} size={16} />
                   </span>{' '}
                   Nouveau secteur : <strong>{getSector(id).name}</strong>
+                </p>
+              ))}
+              {reward.unlockDistricts.map((id) => (
+                <p key={id} className="small">
+                  <span className="inline-icon accent">
+                    <Icon name="map" size={16} />
+                  </span>{' '}
+                  Nouveau quartier : <strong>{getDistrict(id).name}</strong>
                 </p>
               ))}
             </Section>
